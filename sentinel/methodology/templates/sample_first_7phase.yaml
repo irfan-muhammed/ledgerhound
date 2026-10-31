@@ -1,0 +1,154 @@
+name: Sample-first 7-phase fraud analysis
+description: >-
+  Same destination, different order. Study the fraud population first, then
+  let THAT result decide how the non-fraud comparison set is drawn --
+  sampling strategy is an OUTPUT of phase 1, not a fixed input. Everything
+  downstream inherits a sampling frame that was chosen on evidence, and is
+  reported as such.
+
+phases:
+  - id: p1_fraud_only
+    name: "Fraud population, on its own terms"
+    purpose: >-
+      Characterise fraud thoroughly enough to design the comparison set.
+      The deliverable is not just understanding -- it is the strata and
+      ratio the next phase will sample on.
+    data_scope: fraud_only
+    grains: [transaction, account]
+    outputs: [fraud_profile, sampling_design]
+    steps:
+      - {id: p1.01, grain: transaction, text: "Isolate fraud; row count, entity count, share of population, exact label definition."}
+      - {id: p1.02, grain: transaction, text: "Establish the label's true grain (share of an ever-flagged account's rows that carry the flag)."}
+      - {id: p1.03, grain: transaction, text: "Date range and volume-over-time; note truncation or collection artefacts."}
+      - {id: p1.04, grain: transaction, text: "Amount distribution: quantiles, shape, round-number clustering."}
+      - {id: p1.05, grain: transaction, text: "Time-of-day / day-of-week profile."}
+      - {id: p1.06, grain: transaction, text: "Channel, status, purpose and error-code mix."}
+      - {id: p1.07, grain: transaction, text: "Null/default patterns and per-column cardinality."}
+      - {id: p1.08, grain: transaction, text: "Identify upstream-model or case-management columns; confirm provenance via ask_user."}
+      - {id: p1.09, grain: account, text: "Transactions per fraud account; one-shot vs sustained."}
+      - {id: p1.10, grain: account, text: "Counterparty spread and device/VPA sharing per account."}
+      - {id: p1.11, grain: account, text: "Account lifetime, gap burstiness, inbound/outbound asymmetry."}
+      - {id: p1.12, grain: any, text: "Write the mechanism hypotheses and the trace each would leave."}
+      - {id: p1.13, grain: any, text: "DECIDE THE SAMPLING DESIGN: which variables the non-fraud set must be matched on, and why those and not others."}
+      - {id: p1.14, grain: any, text: "Decide the fraud:non-fraud ratio to draw, and state the reasoning (population prevalence, alert volume, class balance needs)."}
+      - {id: p1.15, grain: any, text: "Record the sampling design explicitly as this phase's output -- phase 2 consumes it verbatim."}
+
+  - id: p2_matched_nonfraud
+    name: "Draw and profile the matched non-fraud set"
+    purpose: >-
+      Build the comparison set to the phase-1 design, then profile it with
+      the same lens so the contrast in phase 3 is like-for-like.
+    data_scope: nonfraud_only
+    grains: [transaction, account]
+    outputs: [sample_frame_certificate, nonfraud_profile]
+    steps:
+      - {id: p2.01, grain: any, text: "Draw the non-fraud set with sample_frame using the p1.13/p1.14 design; do not improvise new parameters here."}
+      - {id: p2.02, grain: any, text: "Record the certificate: requested vs achieved ratio, strata, seed, population prevalence."}
+      - {id: p2.03, grain: any, text: "Verify the match: compare the strata distributions of the drawn set against the fraud side and report residual imbalance."}
+      - {id: p2.04, grain: any, text: "State plainly that every rate computed on this frame is a SAMPLE rate, not a population rate."}
+      - {id: p2.05, grain: transaction, text: "Amount distribution, mirroring p1.04."}
+      - {id: p2.06, grain: transaction, text: "Time-of-day / day-of-week profile, mirroring p1.05."}
+      - {id: p2.07, grain: transaction, text: "Channel/status/purpose/error mix, mirroring p1.06."}
+      - {id: p2.08, grain: account, text: "Transactions per account, counterparty spread, device sharing (mirrors p1.09-p1.10)."}
+      - {id: p2.09, grain: account, text: "Lifetime, burstiness, asymmetry (mirrors p1.11)."}
+      - {id: p2.10, grain: any, text: "Name the legitimate behaviours that already resemble the p1.12 hypotheses -- the expected false positives."}
+
+  - id: p3_contrast
+    name: "Fraud vs matched non-fraud, both grains"
+    purpose: Establish what is distinctive rather than merely present.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [contrast_report, ranked_signal_candidates]
+    steps:
+      - {id: p3.01, grain: any, text: "Restate the comparison frame and the sampling certificate it rests on."}
+      - {id: p3.02, grain: transaction, text: "Amount separation (KS), not just a mean difference."}
+      - {id: p3.03, grain: transaction, text: "Fraud rate by time bucket, with volume alongside."}
+      - {id: p3.04, grain: transaction, text: "Fraud rate by channel / initiation mode."}
+      - {id: p3.05, grain: transaction, text: "Fraud rate by status and error code; exclude post-outcome artefacts."}
+      - {id: p3.06, grain: transaction, text: "Pairwise interaction sweep on the strongest factors; note reversals."}
+      - {id: p3.07, grain: account, text: "Fraud rate by transactions-per-account band."}
+      - {id: p3.08, grain: account, text: "Fraud rate by distinct-counterparty band."}
+      - {id: p3.09, grain: account, text: "Fraud rate by device-sharing band."}
+      - {id: p3.10, grain: account, text: "Fraud rate by lifetime, burstiness and asymmetry bands."}
+      - {id: p3.11, grain: any, text: "Test each p1.12 hypothesis: supported, contradicted, or untestable."}
+      - {id: p3.12, grain: any, text: "Rank candidates by IV/KS; convert any sample rate to a population estimate before quoting it."}
+      - {id: p3.13, grain: any, text: "Separate confirmatory findings from genuinely new ones."}
+      - {id: p3.14, grain: any, text: "Leakage-check every candidate before carrying it forward; save the phase report."}
+
+  - id: p4_aggregation_plan
+    name: "Aggregation plan and filter conditions"
+    purpose: Turn phases 1-3 into an explicit written plan before computing anything.
+    data_scope: both
+    grains: [account]
+    outputs: [aggregation_plan, filter_conditions]
+    steps:
+      - {id: p4.01, grain: any, text: "Declare the modelling entity and key column, justified from phase 3."}
+      - {id: p4.02, grain: any, text: "Declare the observation window and as-of rule."}
+      - {id: p4.03, grain: any, text: "Declare inclusion filters and their effect on counts."}
+      - {id: p4.04, grain: any, text: "Declare exclusions and why (upstream scores, workflow artefacts, test accounts)."}
+      - {id: p4.05, grain: any, text: "Decide the entity-grain label definition."}
+      - {id: p4.06, grain: any, text: "Confirm or revise the sampling frame now that phase 3 is known; record any change from p1.13."}
+      - {id: p4.07, grain: any, text: "List aggregate families, each tied to a mechanism hypothesis."}
+      - {id: p4.08, grain: any, text: "Choose rolling windows, justified from observed activity spans."}
+      - {id: p4.09, grain: any, text: "Declare the time-based train/test boundary."}
+      - {id: p4.10, grain: any, text: "Record fit_scope for every statistic fitted on data (train-only vs full)."}
+      - {id: p4.11, grain: any, text: "Write the plan to the run folder and save the phase report."}
+
+  - id: p5_feature_build
+    name: "Build features -- both grains, separate files"
+    purpose: Execute the plan; both grains are legitimate deliverables.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [txn_feature_file, account_feature_file, feature_catalog]
+    steps:
+      - {id: p5.01, grain: any, text: "plan_features at the entity grain; review before computing."}
+      - {id: p5.02, grain: any, text: "Add hypothesis-driven candidates the generic plan missed."}
+      - {id: p5.03, grain: transaction, text: "Build the transaction-level feature set."}
+      - {id: p5.04, grain: transaction, text: "Verify point-in-time validity row by row."}
+      - {id: p5.05, grain: transaction, text: "Export the transaction-level file under its own name."}
+      - {id: p5.06, grain: account, text: "Build account aggregates in batches via cached_agg."}
+      - {id: p5.07, grain: account, text: "Build rolling-window features."}
+      - {id: p5.08, grain: account, text: "Build ratios with guarded denominators."}
+      - {id: p5.09, grain: account, text: "Verify exactly one row per entity."}
+      - {id: p5.10, grain: account, text: "Export the account-level file, separate from the transaction file."}
+      - {id: p5.11, grain: any, text: "check_leakage over the full candidate set."}
+      - {id: p5.12, grain: any, text: "Check inf/NaN and impossible values in both files."}
+      - {id: p5.13, grain: any, text: "Record counts and null rates; save the phase report."}
+
+  - id: p6_feature_selection
+    name: "Find the optimal feature set"
+    purpose: Measure and tier; keep weak-but-real, drop only the indefensible.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [feature_catalog, selected_feature_set]
+    steps:
+      - {id: p6.01, grain: any, text: "IV/KS/AUC for every candidate on TRAIN only."}
+      - {id: p6.02, grain: any, text: "Inspect IV > ~0.5 for leakage before believing it."}
+      - {id: p6.03, grain: any, text: "Correlation-prune, recording what was dropped and why."}
+      - {id: p6.04, grain: any, text: "Tier: core / supporting / review / dropped, with reasons."}
+      - {id: p6.05, grain: any, text: "Stability check on a held-out time slice."}
+      - {id: p6.06, grain: any, text: "Coverage check per core feature."}
+      - {id: p6.07, grain: any, text: "Confirm scoring-time computability under the as-of rule."}
+      - {id: p6.08, grain: any, text: "Map the selected set back to the mechanism hypotheses."}
+      - {id: p6.09, grain: any, text: "export_feature_catalog with descriptions, code, metrics and tiers."}
+      - {id: p6.10, grain: any, text: "State what did not earn its place; save the phase report."}
+
+  - id: p7_modelling
+    name: "Fraud modelling"
+    purpose: Optimal precision at the real operating point.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [model, model_performance_report]
+    steps:
+      - {id: p7.01, grain: any, text: "Confirm the split honours the declared time boundary."}
+      - {id: p7.02, grain: any, text: "Baseline first (rule or logistic on core features)."}
+      - {id: p7.03, grain: any, text: "Train the candidate model on the selected set."}
+      - {id: p7.04, grain: any, text: "Precision at the real operating point (top-K per day), not only AUC."}
+      - {id: p7.05, grain: any, text: "Lift by decile and implied alert volume per threshold."}
+      - {id: p7.06, grain: any, text: "Reconcile feature importance with the phase-1 hypotheses."}
+      - {id: p7.07, grain: any, text: "Inspect top false positives against the p2.10 predictions."}
+      - {id: p7.08, grain: any, text: "Inspect false negatives for a missed mechanism."}
+      - {id: p7.09, grain: any, text: "Re-check top features for leakage now importance is known."}
+      - {id: p7.10, grain: any, text: "Record the model, exact feature list, and reproduction steps."}
+      - {id: p7.11, grain: any, text: "Convert any sample-frame metric to a population statement before reporting."}
+      - {id: p7.12, grain: any, text: "Save the final report: improvement over baseline, and what remains open."}

@@ -1,0 +1,97 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Real secrets/env files (env.txt is the committed TEMPLATE, keep that one)
+.env
+*.env
+!env.txt
+
+# Master config -- holds real API keys/base URLs, never pushed.
+# main_config.example.yaml is the committed TEMPLATE, keep that one.
+main_config.yaml
+!main_config.example.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sentinel outputs
+outputs/
+run_outputs/
+digest.yaml
+*.pdf
+outputs/charts/
+
+# Data files (too large for git)
+*.parquet
+*.csv
+*.xlsx
+data/
+# ...but these are SOURCE packages / packaged assets, not data folders -- keep tracked
+!sentinel/data/
+!sentinel/data/*.py
+!sentinel/dictionary/data/
+!sentinel/dictionary/data/*.csv
+!sentinel/dictionary/data/*.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp
+*.tmp
+*.bak
+
+# Compressed
+*.tar.gz
+*.zip
+
+# Claude Code session artifacts (worktrees, transcripts, agent state)
+.claude/
+
+# Sentinel workspace + per-machine profile
+.sentinel/
+sentinel_workspace/
+compute_profile.json
+
+# Test + notebook caches
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local sentinel runs / scratch
+sentinel_ai.egg-info/
+
+# Build stamp (generated at package time)
+sentinel/_build.py
+paper/
+
+# V3-029: real internal package-index config -- holds a live access
+# token embedded in the URL. Never commit this; configs/pip_index.conf.example
+# is the safe, placeholder-only template that IS tracked.
+configs/pip_index.conf
+
+# Session scratch: charts the agent drew during live demo/eval sessions
+# land at repo root; per-session raw outputs land under eval/results/runs/.
+# Curated eval artifacts (eval/results/*.md, *.json) ARE tracked.
+/*.png
+eval/results/runs/
+.gff_demo/
+mytest/
+
+# Web UI local state (recent projects, pinned datasets) -- machine-specific
+# absolute paths, not shared config.
+.webui/

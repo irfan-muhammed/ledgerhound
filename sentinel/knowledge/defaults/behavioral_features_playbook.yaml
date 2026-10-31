@@ -1,0 +1,43 @@
+name: "Behavioral Features EDA"
+description: "EDA playbook for pre-aggregated behavioral feature datasets (one row per account)"
+
+phases:
+  1_understand:
+    name: "Data Understanding"
+    questions:
+      - "Dataset shape, column count, and target variable distribution?"
+      - "Which feature groups exist (by column prefix) and how many features per group?"
+      - "Which columns have null values or zero variance?"
+
+  2_target:
+    name: "Target Analysis"
+    questions:
+      - "What is the fraud rate (target=1 ratio) and class imbalance?"
+      - "Generate a bar chart of target distribution."
+
+  3_features:
+    name: "Feature Importance"
+    questions:
+      - "Compute KS statistic for all numeric features vs target. Show top 20 by separation."
+      - "Generate a correlation heatmap of the top 20 most correlated features with the target."
+      - "Which features have >3x mean difference between fraud and non-fraud?"
+
+  4_distributions:
+    name: "Distribution Analysis"
+    questions:
+      - "For the top 5 features by KS stat, generate histograms split by target class."
+      - "Are there features with extreme skewness (>5) that need transformation?"
+      - "Which features have heavy zero-inflation (>50% zeros)?"
+
+  5_correlations:
+    name: "Feature Interactions"
+    questions:
+      - "Generate a correlation heatmap. Are there highly correlated feature pairs (>0.95)?"
+      - "Which feature pairs are redundant and candidates for removal?"
+
+  6_synthesis:
+    name: "Synthesis"
+    questions:
+      - "Summarize top 10 fraud-predictive features with KS stats and lift ratios."
+      - "What features should be engineered or transformed?"
+      - "What is the recommended feature set for modeling (drop redundant, keep predictive)?"

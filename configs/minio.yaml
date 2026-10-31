@@ -1,0 +1,35 @@
+# ════════════════════════════════════════════════════════════════
+# Sentinel — MinIO / Object Storage Configuration
+# ════════════════════════════════════════════════════════════════
+# Durable store for: wheels (PyPI-style simple index), agent library,
+# eval/run/feedback JSONL, and run artifacts.
+#
+# Credentials are read from env vars — NEVER commit access/secret keys.
+#   export MINIO_ACCESS_KEY="..."
+#   export MINIO_SECRET_KEY="..."
+#
+# Usage:
+#   sentinel <cmd> --minio-config configs/minio.yaml
+# ════════════════════════════════════════════════════════════════
+
+minio:
+  # ---- FILL IN: your on-prem MinIO endpoint (host:port, no scheme) ----
+  endpoint: ""              # e.g. "minio.example.internal:9000"
+  secure: true              # true = https. Set false only for plain-http internal.
+
+  # Self-signed internal cert handling (mirrors the LLM gateway pattern).
+  # Acceptable only on the org's private network; NEVER false for public endpoints.
+  verify_ssl: true
+
+  region: "us-east-1"       # MinIO ignores this but the SDK wants a value.
+
+  # Credential resolution: env var names, not the secrets themselves.
+  access_key_env: "MINIO_ACCESS_KEY"
+  secret_key_env: "MINIO_SECRET_KEY"
+
+  # ---- FILL IN: bucket names (create them in MinIO, or let `doctor` check) ----
+  buckets:
+    wheels:    "sentinel-wheels"      # versioned wheels + simple/ index
+    agents:    "sentinel-agents"      # user agent library
+    data:      "sentinel-data"        # eval / run / feedback JSONL (date-partitioned)
+    artifacts: "sentinel-artifacts"   # run outputs (charts, reports) for runs share

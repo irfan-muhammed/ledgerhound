@@ -1,0 +1,24 @@
+# ════════════════════════════════════════════════════════════════
+# Sentinel — Local HuggingFace Model Config
+# ════════════════════════════════════════════════════════════════
+# Uses DeepSeek-R1-Distill-Qwen-32B with 4-bit quantization.
+# No API server needed — loads directly onto GPU.
+#
+# Requirements:
+#   pip install torch transformers bitsandbytes accelerate
+#
+# Usage:
+#   sentinel eda --digest digest.yaml --llm-config configs/llm_local.yaml --ask "..."
+# ════════════════════════════════════════════════════════════════
+
+llm:
+  provider: huggingface_local
+  model: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+  hf_home: "/data/.cache/huggingface/"
+  quantize_4bit: true
+  device_map: "auto"
+  max_new_tokens: 2048
+  temperature: 0.6
+  do_sample: false
+  trust_remote_code: false
+  offline: true

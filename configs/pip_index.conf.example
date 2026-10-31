@@ -1,0 +1,48 @@
+# ════════════════════════════════════════════════════════════════
+# Sentinel — internal package index (the organization wheelhouse mirror), V3-029
+# ════════════════════════════════════════════════════════════════
+# Template only -- contains NO real credentials. Copy this file to
+# `pip_index.conf` (same folder) and fill in the real URLs there.
+# `pip_index.conf` is gitignored -- it will hold a real access token
+# embedded in the URL and must never be committed.
+#
+# Usage (this file is NOT picked up automatically -- point pip at it
+# explicitly for the whole shell session):
+#
+#   export PIP_CONFIG_FILE=configs/pip_index.conf
+#   pip install xgboost
+#
+# (Windows PowerShell: $env:PIP_CONFIG_FILE = "configs/pip_index.conf")
+#
+# index-url       = the PRIMARY source (the internal package repo). Tried first, always.
+# extra-index-url = the FALLBACK source (public PyPI).
+#
+# Tested empirically before shipping this, not assumed: when index-url's
+# host is completely unreachable (DNS failure -- e.g. the internal package repo only
+# resolves on the server's private network, not from a local machine),
+# pip genuinely does retry a few times and then fall through to
+# extra-index-url automatically. No wrapper script needed -- this is
+# the "minimal effort" version: same pip.conf works unchanged on the
+# server (primary resolves, succeeds first try) and locally (primary
+# fails, falls back to PyPI).
+#
+# The one real cost: pip's default retry count (5, with backoff) makes
+# that local fallback slow -- measured ~10s of pure retry overhead per
+# package before it gives up on the unreachable host and tries PyPI.
+# `retries = 1` below cuts that to ~2.6s per package and costs nothing
+# on the server (the primary succeeds on the first attempt there, so
+# the retry count never gets used). Raise it back if 1 proves too
+# flaky on a slow/flaky local network.
+#
+# If the internal package repo uses a self-signed certificate (same as the LLM gateway
+# at gateway.example.com, which sets verify_ssl: false in
+# configs/gateway.yaml), pip will refuse the connection with a
+# certificate error until you uncomment the trusted-host line below.
+# Leave it commented until you actually hit that error -- don't trust
+# a host you don't need to.
+
+[global]
+index-url = https://<ACCESS_TOKEN>@repo.example.<domain>/simple/
+extra-index-url = https://pypi.org/simple/
+retries = 1
+# trusted-host = repo.example.<domain>

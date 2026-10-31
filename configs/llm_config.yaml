@@ -1,0 +1,70 @@
+# ════════════════════════════════════════════════════════════════
+# Sentinel LLM Configuration
+# ════════════════════════════════════════════════════════════════
+# Copy this file, uncomment the section you want, and pass it:
+#   sentinel eda --digest digest.yaml --llm-config configs/llm_config.yaml
+#
+# Two modes:
+#   1. API mode (provider: api) — talks to a remote endpoint
+#   2. Local mode (provider: huggingface_local) — loads model on local GPU
+# ════════════════════════════════════════════════════════════════
+
+
+# ── OPTION 1: Local vLLM on H200s (recommended for production) ──
+llm:
+  provider: api
+  base_url: "http://localhost:8000/v1"
+  model: "Qwen3-235B-A22B-Thinking-2507"
+  api_key: "EMPTY"
+  temperature: 0.6
+  max_tokens: 16384
+
+
+# ── OPTION 2: Local HuggingFace model (no API server needed) ────
+# Uncomment this block and comment out Option 1 above.
+# Requires: pip install torch transformers bitsandbytes accelerate
+#
+# GPU allocation: with a local model, Sentinel reserves ONE GPU for the LLM
+# (GPU0 by default) and gives the remaining GPUs to cuDF/compute. Leave
+# device_map at "auto" and Sentinel pins it to the reserved GPU for you -- it
+# does NOT shard across every GPU any more. Set device_map explicitly (e.g.
+# "cuda:1") to override. (With a remote API model instead -- gateway Kimi,
+# DeepSeek -- no GPU is reserved and GPU0 goes to cuDF.)
+#
+# llm:
+#   provider: huggingface_local
+#   model: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+#   hf_home: "/data/.cache/huggingface/"
+#   quantize_4bit: true
+#   device_map: "auto"      # auto -> Sentinel pins to the reserved GPU (GPU0)
+#   max_new_tokens: 2048
+#   temperature: 0.6
+#   do_sample: false
+#   offline: true
+
+
+# ── OPTION 3: OpenAI API ────────────────────────────────────────
+# llm:
+#   provider: api
+#   base_url: "https://api.openai.com/v1"
+#   model: "gpt-4o"
+#   api_key: "sk-your-key-here"
+#   temperature: 0.6
+#   max_tokens: 8192
+
+
+# ── OPTION 4: Together.ai ───────────────────────────────────────
+# llm:
+#   provider: api
+#   base_url: "https://api.together.xyz/v1"
+#   model: "Qwen/Qwen3-235B-A22B-Thinking"
+#   api_key: "your-together-key"
+#   temperature: 0.6
+
+
+# ── OPTION 5: Groq ──────────────────────────────────────────────
+# llm:
+#   provider: api
+#   base_url: "https://api.groq.com/openai/v1"
+#   model: "llama-3.3-70b-versatile"
+#   api_key: "your-groq-key"

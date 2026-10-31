@@ -1,0 +1,32 @@
+name: "What-If Scenarios"
+description: "Hypothesis-driven analysis — what changes if we filter differently?"
+
+phases:
+  1_hypotheses:
+    name: "Generate Hypotheses"
+    questions:
+      - "Based on the data profile, generate 3 what-if hypotheses about population filters that could improve fraud signal."
+
+  2_scenario_new_accounts:
+    name: "What-If: New Accounts"
+    questions:
+      - "Filter to accounts with fewer than 30 days of activity. How does the fraud rate change?"
+      - "Compare top fraud signals for new accounts vs established accounts."
+
+  3_scenario_high_value:
+    name: "What-If: High-Value Transactions"
+    questions:
+      - "Filter to accounts where max transaction amount is in the top 10%. How does fraud rate change?"
+      - "Which features become more predictive for high-value fraud accounts?"
+
+  4_scenario_velocity:
+    name: "What-If: High Velocity"
+    questions:
+      - "Filter to accounts with transaction count in top 5%. Compare fraud signals."
+      - "Do velocity features (cnt_txn, cnt_days) become more important for high-activity accounts?"
+
+  5_compare:
+    name: "Compare Scenarios"
+    questions:
+      - "Create a comparison table: fraud rate and top 3 features for each scenario vs baseline."
+      - "Which scenario produces the strongest fraud signal? Recommend the modeling population."

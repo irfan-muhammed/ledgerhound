@@ -1,0 +1,47 @@
+# Sentinel -- generic OpenAI-compatible gateway
+#
+# One config for ANY model behind an OpenAI-compatible gateway (vLLM,
+# LiteLLM, OpenRouter, a company proxy, ...) -- the gateway shape never
+# changes, only the model name does. Prefer setting base_url/model/key in
+# main_config.yaml (see main_config.example.yaml's llm.gateway block) --
+# this file just declares method: gateway and static tuning; no env vars to
+# export for a normal setup.
+#
+# Usage:
+#   sentinel shell --llm-config configs/gateway.yaml   (or: /model configs/gateway.yaml)
+#
+# Equivalent curl (viewing available models):
+#   curl -X GET https://llm-gateway.example.com/v1/models \
+#        -H 'Authorization: Bearer <bearer-token>' \
+#        -H 'Content-Type: application/json'
+#
+# Equivalent curl (chat completions):
+#   curl -X POST https://llm-gateway.example.com/v1/chat/completions \
+#        -H 'Content-Type: application/json' \
+#        -H 'Authorization: Bearer <bearer-token>' \
+#        -d '{"model":"qwen-3.6-35B-A3B","messages":[...],"stream":false}'
+
+llm:
+  method: gateway
+  verify_ssl: true           # set false ONLY for a private-network gateway with a
+                              # self-signed cert (curl -k equivalent) --
+                              # never for a public-internet endpoint.
+  temperature: 0.6
+  max_tokens: 16384
+  top_p: 0.95
+  timeout: 300
+
+  # Thinking-mode controls. Advisory only -- NOT sent in the request body
+  # (injecting unknown top-level params can 400 some gateways). If your
+  # gateway accepts thinking controls, put its exact params under
+  # extra_body, which is passed through verbatim.
+  enable_thinking: true
+  thinking_budget: 8192
+
+  # IMPORTANT (tool calling): for the agent to use tools, the inference
+  # server must be started with a tool-call parser matching the deployed
+  # model (e.g. vLLM: --enable-auto-tool-choice --tool-call-parser
+  # kimi_k2 for a Kimi-K2 model) so native tool tokens return as OpenAI
+  # `tool_calls`. If not, Sentinel recovers tool calls that arrive as
+  # text, but a server that STRIPS the tokens still shows empty turns --
+  # fix it server-side.

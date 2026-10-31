@@ -1,0 +1,217 @@
+# Sentinel -- master config template.
+#
+# Copy this to main_config.yaml (gitignored -- never pushed) and fill in
+# what you need. No environment variables to export, nothing to set
+# per-terminal-session -- EVERYTHING the project reads from the environment
+# lives here instead (LLM/judge, GPU tuning, Trino, the web UI, real
+# institutional knowledge, identity, integrations). Every field also still
+# has an environment-variable fallback (named in each comment) for
+# production paths that inject env vars directly (e.g. Kubeflow's
+# PodDefault for identity.user) -- but main_config.yaml wins when present.
+#
+#   cp main_config.example.yaml main_config.yaml
+#
+# `method` picks ONE of three connection shapes per section (llm / judge):
+#   self  = self-hosted (vLLM-style), no api_key needed
+#   gateway = any OpenAI-compatible gateway/proxy (vLLM, LiteLLM, OpenRouter,
+#           a company proxy) -- same shape for ANY model behind it, only
+#           `model` changes
+#   api   = any external hosted provider (DeepSeek, GLM, OpenAI-compatible)
+#
+# `model_fallback` is used only if `model` is blank -- a static default
+# chosen once at startup, not a runtime retry-on-failure.
+
+llm:
+  method: gateway           # self | gateway | api
+
+  self:
+    base_url: ""
+    models_url: ""        # optional -- see note below
+    model: ""
+    model_fallback: ""
+
+  gateway:
+    base_url: "https://llm-gateway.example.com/v1"
+    models_url: "https://llm-gateway.example.com/v1/models"
+    model: "qwen-3.6-35B-A3B"    # or whatever's behind the gateway
+    model_fallback: ""
+    api_key: ""            # your bearer token
+
+  api:
+    base_url: ""           # e.g. https://api.deepseek.com/v1
+    models_url: ""         # optional -- see note below
+    model: ""               # e.g. deepseek-v4-flash, glm-4.6, ...
+    model_fallback: ""
+    api_key: ""
+
+  # models_url: for MODEL SELECTION (`sentinel shell`'s auto-discovery/
+  # `/model` picker) only -- chat completions always use base_url above,
+  # unaffected. Blank (the normal case) -> discovery just hits
+  # "<base_url>/models". Set this ONLY if your gateway serves the model
+  # LIST from a genuinely different URL than chat completions (a separate
+  # registry endpoint, a different API version path, ...).
+
+# LLM-as-judge (eval/scoring runs only -- not needed for normal shell use).
+# Independent of `llm:` above -- the judge can run a different
+# method/model than the actor. Leave `method` blank to self-judge (uses
+# the actor's own credentials, always disclosed as self_judge: true).
+judge:
+  method: ""              # "" | self | gateway | api
+
+  self:
+    base_url: ""
+    models_url: ""
+    model: ""
+    model_fallback: ""
+
+  gateway:
+    base_url: ""
+    models_url: ""
+    model: ""
+    model_fallback: ""
+    api_key: ""
+
+  api:
+    base_url: ""
+    model: ""
+    model_fallback: ""
+    api_key: ""
+
+# ============================================================
+# Where everything gets saved. NOT optional/commented -- this is the
+# whole point: only the DATA FILE PATH is given at chat time (load_data),
+# every OUTPUT location is decided here, once, up front.
+# ============================================================
+paths:
+  # By default EVERYTHING Sentinel writes lands in one folder per user,
+  # one level above the folder you launch from:
+  #
+  #   ../Agentic_eda_results/<username>/
+  #       run_outputs/   one dated folder per session (reports, findings,
+  #                      events, transcripts, feature tables, paths.json)
+  #       data_cache/    local copies of /s3 data, downloaded tokenizers
+  #       library/       the project: dataset cards, books, settings, knowledge
+  #
+  # Leave these blank to keep that layout. Set one only to move it.
+  results_root: ""        # where Agentic_eda_results is (blank = one level above the launch folder)
+  run_outputs_dir: ""     # blank = <results>/<username>/run_outputs
+  workspace_dir: ""       # blank = <results>/<username>/library
+  data_cache_dir: ""      # blank = <results>/<username>/data_cache
+                          # On a pod with a small PVC and lots of RAM, set
+                          # /dev/shm/sentinel-data: /s3 data is then held in RAM,
+                          # and that session's feature tables are written next to
+                          # it and uploaded to the store after every step.
+
+# ============================================================
+# Everything below is OPTIONAL and commented out on purpose. Each already
+# has a working default (or falls back to its env var, listed in each
+# comment) -- uncomment and set ONLY what you want to override. A
+# section left commented out behaves exactly as if main_config.yaml
+# didn't exist for it.
+# ============================================================
+
+# Real institutional knowledge -- kept OUTSIDE this repo entirely. This
+# package never carries real customer/production data or proprietary
+# business rules (it ships in a public repo).
+# knowledge:
+#   profiles_dir: ""      # env fallback: SENTINEL_PROFILES_DIR
+#   knowledge_dir: ""     # env fallback: SENTINEL_KNOWLEDGE_DIR
+
+# GPU / compute -- all have working defaults already.
+# gpu:
+#   enable_dask_cudf: true       # env fallback: SENTINEL_ENABLE_DASK_CUDF
+#   force_gpu_frames: true       # env fallback: SENTINEL_FORCE_GPU_FRAMES
+#   force_gpu_min_rows: 1000000  # env fallback: SENTINEL_FORCE_GPU_MIN_ROWS
+#   cudf_pandas: true            # env fallback: SENTINEL_CUDF_PANDAS
+
+# Kernel mode (the persistent IPython kernel `sentinel shell` runs cells in).
+# kernel:
+#   cell_timeout_seconds: 1800   # one run_python cell may run this long
+#                                # before it is interrupted. A runaway-cell
+#                                # safety net, not a pace-setter: a single
+#                                # groupby on crore-scale data on the CPU
+#                                # fallback can legitimately take minutes.
+#                                # env fallback: SENTINEL_CELL_TIMEOUT
+
+# The team object store (S3-compatible Ceph at a payments organization): tokenizers, /s3 data,
+# uploaded feature tables and the shared team knowledge base. It needs BOTH
+# keys you were issued -- put them here (this file is gitignored), or set
+# them from the shell instead:
+#   /minio --key            (hidden prompt for the secret, checked before saving)
+#   /minio --access-key <k>
+#   /minio                  (shows what is set and tests the connection)
+# Pod env vars MINIO_ACCESS_KEY / MINIO_SECRET_KEY override both.
+minio:
+  endpoint: "objectstore.example.com:9000"
+  bucket: "sentinel-data"
+  access_key: ""            # the access key you were issued, e.g. your-access-key-id
+  secret_key: ""            # its secret key. This file is gitignored, so it never reaches git.
+                            # (Or leave blank and set it in the shell with /minio --key.)
+  verify_ssl: true          # set false only for a self-signed internal certificate
+  outputs_prefix: "outputs" # /s3 sessions upload features to <bucket>/<this>/<user>/<run>/features/
+  client: ""                # "" = boto3 if installed (pip install ".[s3]"), else the minio package
+  team_kb: true             # share dataset cards, data answers, findings and books with the team
+  kb_prefix: "kb/v1"        # where in the bucket the team knowledge base lives
+
+# Exact token counting for context compaction. Optional: without it the
+# shell estimates tokens until the gateway's first reply, then calibrates
+# from the usage the gateway reports. With it, counts are exact from the
+# first request. Needs `pip install ".[tokenizers]"` (tokenizers + tiktoken).
+# Tokenizers are read from the `minio:` store above (prefix "tokenizers/",
+# uploaded with tokenizers/upload_to_minio.py) unless local_dir is set.
+# Whatever goes wrong, the shell prints one block at startup naming the
+# cause and the fix, then carries on -- it never blocks a session.
+# tokenizers:
+#   prefix: "tokenizers"
+#   local_dir: ""                # a mounted folder (e.g. the PVC) with
+#                                # manifest.json; wins over the store
+#   cache_dir: ""                # default ~/.sentinel/tokenizers
+
+# Session-quality observability -- for running Sentinel as a shared service
+# for other people. events.jsonl (full-fidelity, per-run, unbounded) is
+# unaffected by any of this. This is a SEPARATE, size-capped, ONE-file-for-
+# the-whole-deployment log: a compact scorecard line (tool-call/error/
+# refusal/HITL counts, not bodies) appended after every turn, from every
+# user, every project. Default path: ~/.sentinel/sessions.jsonl.
+# observability:
+#   sessions_log: ""               # blank = ~/.sentinel/sessions.jsonl.
+#                                   # env fallback: SENTINEL_SESSIONS_LOG.
+#                                   # Point this at shared/mounted storage
+#                                   # so every pod/user writes to one file.
+
+# Identity / attribution.
+# identity:
+#   user: ""    # your name/id -- attributes runs, decisions, findings to
+#               # you. env fallback: SENTINEL_USER (Kubeflow's PodDefault
+#               # -- the production path, unaffected by leaving this unset)
+
+# Integrations (only if you use them). git/jira tokens are project-scoped,
+# not global -- see sentinel/project/settings.py's token_env mechanism
+# (.sentinel/config.yaml), not this file.
+# integrations:
+#   index_url: ""       # custom pip wheel index. env fallback: SENTINEL_INDEX_URL
+#   minio_config: ""    # path to a MinIO config file. env fallback: SENTINEL_MINIO_CONFIG
+
+# Trino (only if querying via Trino instead of local files).
+# trino:
+#   host: ""              # env fallback: SENTINEL_TRINO_HOST
+#   port: 8080             # env fallback: SENTINEL_TRINO_PORT
+#   user: ""              # env fallback: SENTINEL_TRINO_USER
+#   password: ""           # env fallback: SENTINEL_TRINO_PASSWORD
+#   catalog: ""            # env fallback: SENTINEL_TRINO_CATALOG
+#   schema: ""             # env fallback: SENTINEL_TRINO_SCHEMA
+#   http_scheme: "https"   # env fallback: SENTINEL_TRINO_HTTP_SCHEME
+#   use: true              # env fallback: SENTINEL_TRINO_USE
+
+# Web UI (only if you run `sentinel webui`, not the CLI shell).
+# webui:
+#   host: "127.0.0.1"      # env fallback: SENTINEL_WEBUI_HOST
+#   port: 8000              # env fallback: SENTINEL_WEBUI_PORT
+#   config: ""              # env fallback: SENTINEL_WEBUI_CONFIG
+#   project: ""              # env fallback: SENTINEL_WEBUI_PROJECT
+#   project_roots: ""        # os.pathsep-separated. env fallback: SENTINEL_WEBUI_PROJECT_ROOTS
+#   autonomous: true         # env fallback: SENTINEL_WEBUI_AUTONOMOUS
+
+# Advisory / rarely needed.
+# tool_mode: auto   # native | prompt | auto -- how tool-calling is driven
+#                   # to the LLM. env fallback: SENTINEL_TOOL_MODE

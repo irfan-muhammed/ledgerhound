@@ -1,0 +1,218 @@
+name: Top-down 7-phase fraud analysis
+description: >-
+  Fraud-first, hypothesis-led. Study the fraud population on its own terms
+  (transaction then account level, deliberately reasoning as the fraudster
+  would), apply the same lens to non-fraud, contrast the two at BOTH grains,
+  and only then design aggregation, build features at both grains into
+  separate files, select, and model. Transaction-level work is a legitimate
+  and necessary part of this method, not a defect.
+
+phases:
+  # ------------------------------------------------------------------ #
+  - id: p1_fraud_only
+    name: "Fraud population, on its own terms"
+    purpose: >-
+      Understand how the fraud actually works before comparing to anything.
+      Form mechanism hypotheses by reasoning as the fraudster would: what
+      would I do, and what trace would it leave in this table?
+    data_scope: fraud_only
+    grains: [transaction, account]
+    outputs: [fraud_txn_profile, fraud_account_profile, mechanism_hypotheses]
+    steps:
+      - {id: p1.01, grain: transaction, text: "Isolate the fraud subset; record its row count and share of the population, and state the label's exact definition."}
+      - {id: p1.02, grain: transaction, text: "Establish the label's true grain: what fraction of an ever-flagged account's transactions carry the flag? Near 100% means an account-level verdict stamped on every row."}
+      - {id: p1.03, grain: transaction, text: "Date range, gaps and volume-over-time of fraud; note any collection artefacts or truncation."}
+      - {id: p1.04, grain: transaction, text: "Amount distribution: quantiles, log shape, modes, round-number clustering, min/max plausibility."}
+      - {id: p1.05, grain: transaction, text: "Hour-of-day and day-of-week profile; quantify night/weekend concentration."}
+      - {id: p1.06, grain: transaction, text: "Status / response-code mix; separate attempted from successful fraud, they are different behaviours."}
+      - {id: p1.07, grain: transaction, text: "Channel / initiation-mode / purpose-code mix."}
+      - {id: p1.08, grain: transaction, text: "Null and default-value patterns; missingness is often itself the signal."}
+      - {id: p1.09, grain: transaction, text: "Per-column cardinality; classify each column as numeric, categorical, identifier or timestamp."}
+      - {id: p1.10, grain: transaction, text: "Flag any column that looks like an upstream model output or case-management artefact and confirm provenance with ask_user before using it."}
+      - {id: p1.11, grain: account, text: "Aggregate fraud to the account grain; how many distinct accounts, and how many transactions each?"}
+      - {id: p1.12, grain: account, text: "Distribution of transactions per fraud account: one-shot mules vs sustained accounts."}
+      - {id: p1.13, grain: account, text: "Counterparty spread: distinct payees per fraud account, and its distribution."}
+      - {id: p1.14, grain: account, text: "Device / VPA sharing: distinct devices per account and accounts per device; look for many-to-one structure."}
+      - {id: p1.15, grain: account, text: "Account lifetime: first-to-last activity span, and burstiness of the gaps."}
+      - {id: p1.16, grain: account, text: "Inbound vs outbound asymmetry per account (pass-through behaviour)."}
+      - {id: p1.17, grain: account, text: "Amount concentration per account: max/mean, share of the largest transaction."}
+      - {id: p1.18, grain: account, text: "Repeat-counterparty structure: are the same payees reused, or is each transaction a new one?"}
+      - {id: p1.19, grain: any, text: "Write the mechanism hypotheses explicitly: 2-5 candidate fraud mechanisms, each with the trace you would expect it to leave."}
+      - {id: p1.20, grain: any, text: "For each hypothesis, name the feature family that would evidence it. This drives phases 4-5; record it now."}
+
+  # ------------------------------------------------------------------ #
+  - id: p2_nonfraud_only
+    name: "Non-fraud population, same lens"
+    purpose: >-
+      Apply the identical analysis to legitimate activity, so that anything
+      claimed as distinctive later is measured against a real baseline
+      rather than assumed.
+    data_scope: nonfraud_only
+    grains: [transaction, account]
+    outputs: [nonfraud_txn_profile, nonfraud_account_profile]
+    steps:
+      - {id: p2.01, grain: any, text: "Decide and DECLARE the non-fraud working set: full population, or a sample. If sampled, use sample_frame and record ratio, strata and population prevalence."}
+      - {id: p2.02, grain: transaction, text: "Row count, date range and volume-over-time; confirm the window matches the fraud window or state the mismatch."}
+      - {id: p2.03, grain: transaction, text: "Amount distribution, same statistics as p1.04, so the two are directly comparable."}
+      - {id: p2.04, grain: transaction, text: "Hour-of-day and day-of-week profile (mirrors p1.05)."}
+      - {id: p2.05, grain: transaction, text: "Status / response-code mix (mirrors p1.06)."}
+      - {id: p2.06, grain: transaction, text: "Channel / initiation-mode / purpose-code mix (mirrors p1.07)."}
+      - {id: p2.07, grain: transaction, text: "Null and default-value patterns (mirrors p1.08)."}
+      - {id: p2.08, grain: account, text: "Transactions per account distribution (mirrors p1.12)."}
+      - {id: p2.09, grain: account, text: "Distinct payees per account (mirrors p1.13)."}
+      - {id: p2.10, grain: account, text: "Device / VPA sharing (mirrors p1.14)."}
+      - {id: p2.11, grain: account, text: "Account lifetime and gap burstiness (mirrors p1.15)."}
+      - {id: p2.12, grain: account, text: "Inbound vs outbound asymmetry (mirrors p1.16)."}
+      - {id: p2.13, grain: account, text: "Amount concentration per account (mirrors p1.17)."}
+      - {id: p2.14, grain: any, text: "Note where legitimate behaviour ALREADY looks like a fraud hypothesis from p1.19 -- these are your future false positives, name them now."}
+
+  # ------------------------------------------------------------------ #
+  - id: p3_contrast
+    name: "Fraud vs non-fraud contrast, both grains"
+    purpose: >-
+      Establish what is genuinely DISTINCTIVE rather than merely present in
+      fraud. Uses phases 1 and 2 as its inputs; a pattern common to both
+      populations is not a signal however striking it looked alone.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [contrast_report, ranked_signal_candidates]
+    steps:
+      - {id: p3.01, grain: any, text: "State the comparison frame: same window, same filters, and whether rates are population or within-sample."}
+      - {id: p3.02, grain: transaction, text: "Amount: overlay the two distributions; quantify separation (KS), not just 'higher on average'."}
+      - {id: p3.03, grain: transaction, text: "Hour/day: fraud rate BY time bucket, with volume shown alongside so a rare bucket is not over-read."}
+      - {id: p3.04, grain: transaction, text: "Fraud rate by channel / initiation mode, with confidence given the bucket volume."}
+      - {id: p3.05, grain: transaction, text: "Fraud rate by status / response code; separate genuine signal from post-outcome artefacts."}
+      - {id: p3.06, grain: transaction, text: "Fraud rate by purpose code and by error code."}
+      - {id: p3.07, grain: transaction, text: "Interaction sweep: pick the 3 strongest single factors and cross them pairwise; report where the effect reverses."}
+      # the organization reviewer, 2026-08-14: cross-column interaction x fraud rate was
+      # rated the single most valuable move across four iterations ("the most
+      # valuable among all four"). It was implicit in p3.07; these make it a
+      # required sweep rather than an optional flourish.
+      - {id: p3.07a, grain: transaction, text: "Systematic pairwise sweep of ALL categorical columns against fraud rate -- status x response code, initiation mode x purpose code, error code x transaction type -- reporting cell volume alongside every rate so a thin cell is not over-read."}
+      - {id: p3.07b, grain: transaction, text: "Go to three columns where a pair looked strong. A pair that only separates inside one level of a third column is a different, sharper finding than the pair alone."}
+      - {id: p3.07c, grain: transaction, text: "For each interaction that holds, state the MECHANISM it implies -- what is the fraudster doing that produces this cell? An interaction without a mechanism is a coincidence until shown otherwise."}
+      - {id: p3.07d, grain: transaction, text: "Turn each surviving interaction into a named candidate feature at the ACCOUNT grain (e.g. per-remitter count of a high-risk response code), not a per-transaction flag."}
+      - {id: p3.08, grain: account, text: "Fraud rate by transactions-per-account band."}
+      - {id: p3.09, grain: account, text: "Fraud rate by distinct-payees band -- the counterparty-spread signal."}
+      - {id: p3.10, grain: account, text: "Fraud rate by devices-per-account and accounts-per-device band."}
+      - {id: p3.11, grain: account, text: "Fraud rate by account lifetime band and by burstiness."}
+      - {id: p3.12, grain: account, text: "Fraud rate by inbound/outbound asymmetry band."}
+      - {id: p3.13, grain: account, text: "Fraud rate by amount-concentration band."}
+      - {id: p3.14, grain: any, text: "Test each p1.19 mechanism hypothesis against the contrast: supported, contradicted, or untestable with this data. Say which."}
+      - {id: p3.15, grain: any, text: "Compute IV/KS for every candidate signal so far with evaluate_features; rank them."}
+      # Reviewer, 2026-08-14: "Compare fraud and non-fraud populations at the
+      # account level" and "expand rolling-window and temporal behavioural
+      # analysis". Phases 1-2 profile each population at the account grain,
+      # but nothing contrasted them there, and nothing looked at behaviour
+      # over time within an account.
+      - {id: p3.13a, grain: account, text: "Contrast the two populations on the SAME account-level aggregate distributions built in p1.11-p1.18 vs p2.08-p2.13; quantify separation per aggregate, do not eyeball it."}
+      - {id: p3.13b, grain: account, text: "Rolling-window behaviour per account: velocity, distinct counterparties and amount over trailing windows (e.g. 1h/24h/7d). Contrast fraud vs non-fraud on the SHAPE of those curves, not just their totals."}
+      - {id: p3.13c, grain: account, text: "Time-to-event structure: how long between account first activity and first fraud, and what changes in the account's behaviour immediately before it?"}
+      - {id: p3.13d, grain: account, text: "Last-window features: aggregate each account's most recent window separately from its lifetime, and check whether recency separates better than the lifetime aggregate."}
+      - {id: p3.16, grain: any, text: "Explicitly list confirmatory findings -- true but already known to any fraud analyst -- separately from genuinely new ones."}
+      - {id: p3.16a, grain: any, text: "Check every claim against the domain profile's established_findings. Anything that restates one is NOT this iteration's output; report what it adds instead -- mechanism, interaction, or the feature it justifies."}
+      - {id: p3.17, grain: any, text: "Check every candidate for leakage/point-in-time validity before it is carried into phase 4."}
+      - {id: p3.18, grain: any, text: "Save the iteration report for this phase (save_report) before moving on."}
+
+  # ------------------------------------------------------------------ #
+  - id: p4_aggregation_plan
+    name: "Aggregation plan and filter conditions"
+    purpose: >-
+      Turn phases 1-3 into an explicit, written plan: what the modelling
+      entity is, which rows are in scope, and which aggregates will be
+      built. Decisions here are stated BEFORE any feature is computed.
+    data_scope: both
+    grains: [account]
+    outputs: [aggregation_plan, filter_conditions]
+    steps:
+      - {id: p4.01, grain: any, text: "Declare the modelling entity and its key column; justify it from phase 3 evidence."}
+      - {id: p4.02, grain: any, text: "Declare the observation window and the as-of rule; every aggregate must be computable at scoring time."}
+      - {id: p4.03, grain: any, text: "Declare inclusion filters (minimum activity, status, date range) and their effect on row/entity counts."}
+      - {id: p4.04, grain: any, text: "Declare exclusions and WHY: test accounts, upstream-model columns, case-management artefacts."}
+      - {id: p4.05, grain: any, text: "Decide the label definition at entity grain: ever-fraud, fraud-in-window, or fraud-after-as-of."}
+      - {id: p4.06, grain: any, text: "Decide the non-fraud sampling frame for modelling: ratio, strata, and the reasoning from phases 2-3."}
+      - {id: p4.07, grain: any, text: "List the aggregate families to build, each tied to a mechanism hypothesis from p1.19."}
+      - {id: p4.08, grain: any, text: "Choose the rolling windows to compute and justify them from the observed activity spans."}
+      - {id: p4.09, grain: any, text: "Decide the train/test split (time-based unless justified otherwise) and state the boundary."}
+      - {id: p4.10, grain: any, text: "State which statistics may be fit on train only (target encodings, rates) and record fit_scope for each."}
+      - {id: p4.11, grain: any, text: "Estimate the cost: entities x features, and whether it fits the compute budget."}
+      - {id: p4.12, grain: any, text: "Write the plan to the run folder and save the phase report before building anything."}
+
+  # ------------------------------------------------------------------ #
+  - id: p5_feature_build
+    name: "Build features -- both grains, separate files"
+    purpose: >-
+      Execute the phase-4 plan. Transaction-level and account-level feature
+      sets are BOTH produced and saved to SEPARATE files; they serve
+      different model designs and neither is a defect.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [txn_feature_file, account_feature_file, feature_catalog]
+    steps:
+      - {id: p5.01, grain: any, text: "Call plan_features to enumerate candidates at the entity grain; review the plan before computing."}
+      - {id: p5.02, grain: any, text: "Add candidates the phase-1 hypotheses demand that the generic plan missed."}
+      - {id: p5.03, grain: transaction, text: "Build the transaction-level feature set per the plan."}
+      - {id: p5.04, grain: transaction, text: "Verify transaction-level features are point-in-time: nothing uses information from after the row's own timestamp."}
+      - {id: p5.05, grain: transaction, text: "Export the transaction-level feature file under its own clear name."}
+      - {id: p5.06, grain: account, text: "Build the account-level aggregates in batches, routing through cached_agg."}
+      - {id: p5.07, grain: account, text: "Build the rolling-window features declared in p4.08."}
+      - {id: p5.08, grain: account, text: "Build the ratio/derived features; guard every denominator against near-zero."}
+      - {id: p5.09, grain: account, text: "Verify exactly one row per entity before export."}
+      - {id: p5.10, grain: account, text: "Export the account-level feature file under its own clear name, separate from the transaction file."}
+      - {id: p5.11, grain: any, text: "Run check_leakage over the full candidate set with the declared label column."}
+      - {id: p5.12, grain: any, text: "Check for inf/NaN and impossible values in both files; fix at source, not by clipping silently."}
+      - {id: p5.13, grain: any, text: "Record row/entity counts and null rates for both files so the deliverable is auditable."}
+      - {id: p5.14, grain: any, text: "Save the phase report describing both files and how to reproduce them."}
+
+  # ------------------------------------------------------------------ #
+  - id: p6_feature_selection
+    name: "Find the optimal feature set"
+    purpose: >-
+      Measure every candidate and tier it. Weak-but-real features are kept
+      -- IV is univariate and a modest feature can still earn its place in
+      a multivariate model. Only the indefensible are dropped.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [feature_catalog, selected_feature_set]
+    steps:
+      - {id: p6.01, grain: any, text: "Compute IV/KS/AUC for every candidate with evaluate_features, on the TRAIN split only."}
+      - {id: p6.02, grain: any, text: "Inspect anything with IV above ~0.5 for leakage before believing it."}
+      - {id: p6.03, grain: any, text: "Prune redundant features by correlation, keeping the stronger of each pair; record what was pruned and why."}
+      - {id: p6.04, grain: any, text: "Tier the survivors: core / supporting / review / dropped, with the reason recorded per feature."}
+      - {id: p6.05, grain: any, text: "Sanity-check stability: do the top features hold up on a held-out time slice?"}
+      - {id: p6.06, grain: any, text: "Check coverage: what fraction of entities have a non-null value for each core feature?"}
+      - {id: p6.07, grain: any, text: "Confirm every selected feature is computable at scoring time with the declared as-of rule."}
+      - {id: p6.08, grain: any, text: "Compare the selected set against the phase-1 mechanism hypotheses -- which mechanisms are now represented, which are not?"}
+      - {id: p6.09, grain: any, text: "Export the documented catalog with export_feature_catalog: description, reproducing code, measured quality, tier."}
+      - {id: p6.10, grain: any, text: "State plainly which candidates did NOT earn their place, so the negative result is recorded too."}
+      # Reviewer, 2026-08-14: "Validate whether EDA-derived insights translate
+      # into meaningful predictive features." p6.08 checks mechanism coverage,
+      # but nothing closed the loop from an individual EDA claim to whether
+      # the feature it justified actually measured up. An insight that does
+      # not survive this is not yet a result.
+      - {id: p6.10a, grain: any, text: "Build the insight-to-feature ledger: one row per EDA finding from phases 1-3, the feature(s) it justified, and that feature's measured quality and tier."}
+      - {id: p6.10b, grain: any, text: "Name the findings that produced NO feature that earned its place. A striking pattern that yields nothing predictive is a real and reportable negative -- say so rather than leaving it implied in the narrative."}
+      - {id: p6.10c, grain: any, text: "Name the features that earned their place but trace to no stated insight. Those are unexplained predictors: either find the mechanism or flag them for review before they reach a model card."}
+      - {id: p6.11, grain: any, text: "Save the phase report, including the insight-to-feature ledger."}
+
+  # ------------------------------------------------------------------ #
+  - id: p7_modelling
+    name: "Fraud modelling"
+    purpose: >-
+      Only now. The goal is optimal precision at the operating point the
+      business actually uses, not the best headline AUC.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [model, model_performance_report]
+    steps:
+      - {id: p7.01, grain: any, text: "Confirm the train/test split honours the time boundary declared in p4.09."}
+      - {id: p7.02, grain: any, text: "Establish a baseline (simple rule or logistic on core features) before anything complex."}
+      - {id: p7.03, grain: any, text: "Train the candidate model on the selected feature set."}
+      - {id: p7.04, grain: any, text: "Report precision at the REAL operating point (top-K alerts per day), not only AUC."}
+      - {id: p7.05, grain: any, text: "Report lift by decile and the alert volume implied at each threshold."}
+      - {id: p7.06, grain: any, text: "Check feature importance against the phase-1 hypotheses -- does the model rely on what the analysis said it should?"}
+      - {id: p7.07, grain: any, text: "Investigate the top false positives: are they the ones phase 2 predicted?"}
+      - {id: p7.08, grain: any, text: "Investigate false negatives for a missed mechanism."}
+      - {id: p7.09, grain: any, text: "Re-check the top features for leakage now that importance is known."}
+      - {id: p7.10, grain: any, text: "Record the model, its exact feature list, and how to reproduce it."}
+      - {id: p7.11, grain: any, text: "Save the final report, stating what improved over the baseline and what remains open."}

@@ -1,0 +1,127 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinel-ai"
+version = "0.7.9"
+description = "Sentinel — Agentic EDA Engine for Fraud Modeling"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = [
+    "typer[all]>=0.9.0",
+    "rich>=13.0",
+    "pandas>=2.0",
+    # Imported directly (sentinel/pipeline, backends, graph, ...) rather than
+    # relied on transitively via pandas/scipy -- a direct import belongs in
+    # the declared set so a resolver change cannot silently remove it.
+    "numpy>=1.24",
+    "pyarrow>=14.0",
+    "pyyaml>=6.0",
+    "scipy>=1.11",
+    "httpx>=0.25",
+    "matplotlib>=3.7",
+    "fpdf2>=2.7",
+    "duckdb>=1.0",
+    "nbformat>=5.9",
+    "trino>=0.326",
+    "scikit-learn>=1.3",
+    "networkx>=3.0",
+    "minio>=7.2",
+]
+
+[project.optional-dependencies]
+sql = ["sqlalchemy>=2.0"]
+# Exact token counting for compaction (sentinel.llm.tokenizer): tokenizers
+# reads tokenizer.json (Qwen, DeepSeek, GLM, Gemma); tiktoken reads Kimi's.
+tokenizers = ["tokenizers>=0.20", "tiktoken>=0.7"]
+# Object-store data (`/s3 --path`, sentinel.io.data_source): boto3 is the
+# team's S3 client and is preferred; without it the core `minio` package
+# is used (same S3 protocol, no parallel multipart transfers).
+s3 = ["boto3>=1.28"]
+# RAPIDS wheels are CUDA-major-version specific -- a -cuNN wheel built for
+# one CUDA major version does not import on another (V3-046: invisible at
+# install time, shows up later as "cuDF init failed -> using pandas" at
+# kernel start, i.e. a slow run, not an error). the org's fleet is CUDA 13
+# only, so CUDA 13 is the only GPU toolkit this project installs or names
+# -- there is deliberately no -cu12 extra to reach for by mistake.
+#
+# All RAPIDS wheels need NVIDIA's index:
+#   pip install --extra-index-url=https://pypi.nvidia.com ".[gpu]"
+#
+# rmm is not listed: cudf depends on it, so the matching build comes in
+# automatically and pinning it here only risks a conflicting major.
+gpu = ["cudf-cu13", "cupy-cuda13x", "torch>=2.0"]        # CUDA 13 toolkit (the only one)
+gpu-cu13 = ["cudf-cu13", "cupy-cuda13x", "torch>=2.0"]   # explicit alias, same packages as `gpu`
+# Multi-GPU (SENTINEL_ENABLE_DASK_CUDF=1). dask-cuda has no -cu suffix --
+# it is pure Python and picks up whichever RAPIDS build is present. Without
+# this the flag is inert: _dask_cudf_available() returns False and the
+# router silently keeps to a single GPU.
+multigpu-cu13 = ["dask-cudf-cu13", "dask-cuda"]
+local = ["torch>=2.0", "transformers>=4.40", "bitsandbytes>=0.43", "accelerate>=0.28"]
+dev = ["pytest>=7.0", "ruff>=0.1"]
+# Without these, tests/test_notebook_export.py's nbconvert-execute check and
+# tests/test_conversation.py's kernel-mode tests silently pytest.skip instead
+# of failing -- they degrade gracefully on a bare install, but that means a
+# CI runner without this group never actually exercises those code paths.
+test = ["nbconvert>=7.0", "jupyter_client>=8.0", "ipykernel>=6.0"]
+# V3-029 batch: modeling core (V3-020 selection stack, V3-021 modeler v1).
+# NOTE: this extras group is a LOCAL dev-environment convenience, not V3-029
+# itself -- V3-029 is the org package-gate submission (pre-compiled wheels +
+# hashes reviewed and installed on the org's regulated server); it is closed
+# only when it works there, not when this group installs cleanly here.
+# shap/boruta: NOT required by the shipped path. sentinel.analysis.selection's
+# default Boruta stage (shap_boruta_filter) computes real Tree SHAP values
+# natively via xgboost/lightgbm's own pred_contrib -- no shap/numba import,
+# so no native-DLL risk on a pip-only/no-sudo target. Kept installed here
+# only because `boruta` (BorutaPy) remains available as a fallback backend
+# (boruta_backend="sklearn_rf"); `shap` itself is not imported by any
+# shipped code path and could be dropped from this list.
+wheelhouse = [
+    "xgboost>=2.0",
+    "lightgbm>=4.0",
+    "optuna>=3.5",
+    "boruta>=0.4",
+    "mrmr-selection>=0.2",
+]
+
+[project.scripts]
+sentinel = "sentinel.cli.main:app"
+
+[tool.setuptools.packages.find]
+include = ["sentinel*"]
+
+[tool.setuptools.package-data]
+sentinel = [
+    "knowledge/defaults/*.yaml",
+    "knowledge/defaults/*.json",
+    "dictionary/data/*.csv",
+    "dictionary/data/*.txt",
+    # Unified prompt tree (see sentinel/prompts/README.md): shell prompts,
+    # agentic specs, and skill procedures. These are DATA, not code -- they
+    # must ship with the wheel or the analyst starts on its fallbacks.
+    "prompts/*.md",
+    "prompts/shell/*.md",
+    "prompts/agentic/*.yaml",
+    "prompts/skills/*.md",
+    # Context assets: domain profiles that recognise a dataset on sight.
+    "context/domain_profiles/*.yaml",
+    # Declared phase sequences (V3-043) -- data, not code.
+    "methodology/templates/*.yaml",
+    "agents/playbooks/*.yaml",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]

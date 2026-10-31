@@ -1,0 +1,176 @@
+name: Bottom-up 7-phase fraud analysis
+description: >-
+  Data-first, label-blind until phase 4. Both shipped templates
+  (topdown_7phase, sample_first_7phase) start from the fraud label on turn
+  one -- "reason like a fraudster" -- and only differ in when the sampling
+  strategy gets fixed. This is a genuinely different epistemology: profile
+  the WHOLE population's structure on its own terms first (types,
+  distributions, correlations, natural groupings), with the label withheld,
+  so what counts as "structure" isn't already primed by knowing which rows
+  are fraud. Only once real structure is found does phase 4 check which of
+  it actually separates the classes. The risk this avoids: a top-down
+  analyst who assumes velocity matters (because fraud is a velocity crime)
+  will find velocity signal whether or not it is the strongest signal in
+  the data. This method can surface something nobody hypothesised.
+
+phases:
+  # ------------------------------------------------------------------ #
+  - id: p1_structural_profile
+    name: "Structural profile, label withheld"
+    purpose: >-
+      Understand what this table IS before deciding what it means. No
+      fraud/non-fraud split yet -- looking at the label now would silently
+      prime which columns feel "important" before the data has had a
+      chance to say so itself.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [schema_profile, column_taxonomy, quality_report]
+    steps:
+      - {id: p1.01, grain: any, text: "Row count, column count, memory footprint, date range and grain (one row = ?). Do NOT look at the label column's values yet -- confirm it exists and note its name only."}
+      - {id: p1.02, grain: any, text: "Classify every column: identifier, categorical, numeric, timestamp, free text, boolean, upstream-model-output. No column skipped."}
+      - {id: p1.03, grain: any, text: "Per-column null rate and default-value rate; flag columns where missingness itself looks structured (not random)."}
+      - {id: p1.04, grain: any, text: "Per-column cardinality; flag near-constant columns (candidates to drop) and near-unique columns (candidates for identifier, not feature)."}
+      - {id: p1.05, grain: transaction, text: "For every numeric column: distribution shape (skew, modes, round-number clustering, min/max plausibility) -- population-wide, not split by label."}
+      - {id: p1.06, grain: transaction, text: "For every categorical column: value counts and the share held by the top 5 values; flag long-tail categories that may need bucketing."}
+      - {id: p1.07, grain: transaction, text: "Timestamp columns: range, gaps, granularity, and whether multiple timestamp columns are consistent with each other (e.g. auth before settlement)."}
+      - {id: p1.08, grain: any, text: "Flag any column that looks like an upstream model output, a case-management artefact, or otherwise NOT a raw behavioural signal; confirm provenance with ask_user before using it downstream."}
+      - {id: p1.09, grain: account, text: "If an entity key exists, aggregate to account grain: rows per entity, entity count, and the distribution of activity per entity -- population-wide."}
+      - {id: p1.10, grain: any, text: "Write the column taxonomy and quality report as this phase's deliverable. This is the reference every later phase points back to."}
+
+  # ------------------------------------------------------------------ #
+  - id: p2_univariate_deep_dive
+    name: "Univariate deep dive, still label-blind"
+    purpose: >-
+      Go past summary statistics into what makes each variable UNUSUAL on
+      its own terms -- multi-modality, heavy tails, drift over time,
+      clusters of near-identical rows. Still no label. The goal is a list
+      of "this is statistically strange" observations with no claim yet
+      about what they mean.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [anomaly_list, drift_notes]
+    steps:
+      - {id: p2.01, grain: transaction, text: "For the top 10 highest-cardinality/variance numeric columns, plot the full distribution (not just quantiles) -- note multi-modality or unexpected clusters."}
+      - {id: p2.02, grain: transaction, text: "percentile_table each of those columns against ITSELF across two time windows (e.g. first half vs second half) to check for drift -- population-wide, not fraud-only."}
+      - {id: p2.03, grain: transaction, text: "check_cross_period_stability where a prior snapshot exists; record which columns are stable and which have shifted."}
+      - {id: p2.04, grain: transaction, text: "Identify outlier rows by z-score / IQR per numeric column; sample and read 20 of them -- are they data errors, edge cases, or something else?"}
+      - {id: p2.05, grain: transaction, text: "For high-cardinality categoricals, look for near-duplicate values (typos, encoding variants) that should be merged before they fragment later grouping."}
+      - {id: p2.06, grain: account, text: "At the account grain, look for accounts with unusual STRUCTURE (not amount) -- e.g. unusually regular timing, unusually diverse counterparties, unusually narrow counterparties -- purely descriptive, no label."}
+      - {id: p2.07, grain: any, text: "Rank all p2 observations by how surprising they are, independent of any fraud hypothesis. This ranking is the phase deliverable."}
+      - {id: p2.08, grain: any, text: "For each surprising observation, write ONE sentence on what it would mean if it turned out to correlate with fraud, and ONE sentence on what it would mean if it turned out to be pure data artifact -- do not decide yet which is true."}
+      - {id: p2.09, grain: transaction, text: "Check for near-duplicate ROWS (not just values) -- repeated transactions that may be retries, test data, or a join artifact rather than real activity."}
+      - {id: p2.10, grain: account, text: "At the account grain, distribution of activity SPAN (first-to-last activity) population-wide -- flag whether short-lived accounts are common enough to be their own regime, independent of fraud."}
+
+  # ------------------------------------------------------------------ #
+  - id: p3_structure_without_label
+    name: "Relationships and natural groupings, still label-blind"
+    purpose: >-
+      Find structure that exists in the feature space on its own -- which
+      columns move together, which entities cluster, which combinations
+      recur -- before ever checking whether that structure lines up with
+      fraud. Structure found here is a candidate; phase 4 is where it gets
+      tested.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [correlation_map, cluster_candidates, interaction_candidates]
+    steps:
+      - {id: p3.01, grain: transaction, text: "Full numeric correlation matrix (population-wide); flag clusters of highly correlated columns as redundant-feature candidates, not yet as fraud signal."}
+      - {id: p3.02, grain: transaction, text: "Categorical-categorical association (e.g. Cramer's V) across the columns with the highest cardinality-adjusted variance; note strong pairs."}
+      - {id: p3.03, grain: account, text: "Unsupervised clustering (or a simple rule-based segmentation) of accounts on structural features from p1/p2 -- NOT on the label. Describe each resulting segment in plain terms."}
+      - {id: p3.04, grain: any, text: "For the 5 most surprising p2 observations, generate every pairwise and 3-way interaction with the columns identified in p3.01/p3.02; this is the candidate list, evaluated for real in phase 4."}
+      - {id: p3.05, grain: transaction, text: "Time-of-day/day-of-week structure across the WHOLE population (not fraud-only) -- are there natural regimes (business hours vs off-hours, weekday vs weekend) that later phases should treat separately?"}
+      - {id: p3.06, grain: account, text: "Graph structure if a counterparty/device/IP column exists: degree distribution, connected components, hub accounts -- population-wide."}
+      - {id: p3.07, grain: any, text: "Write the candidate list: clusters, interactions, and regimes found -- each with a one-line reason it might matter, still without reference to the label."}
+      - {id: p3.08, grain: transaction, text: "For the strongest correlated pair/cluster from p3.01, check whether the relationship is linear or has a threshold/kink -- a kink is often more informative than the correlation coefficient alone."}
+      - {id: p3.09, grain: account, text: "Stability of the p3.03 clustering: re-run on a random half of the population and check segment membership agreement -- an unstable clustering is not real structure."}
+      - {id: p3.10, grain: any, text: "Dimensionality check: how many of the original columns does a PCA/factor analysis suggest the real structure reduces to? This bounds how many genuinely independent signals exist."}
+
+  # ------------------------------------------------------------------ #
+  - id: p4_introduce_the_label
+    name: "Introduce the label -- test what survives"
+    purpose: >-
+      The pivot phase. Bring in fraud/non-fraud for the first time and test
+      EVERY candidate from phases 1-3 against it. This is where "data-first"
+      pays off or doesn't -- if nothing found earlier separates the
+      classes, that is itself the finding, not a failure of the method.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [validated_structure, killed_candidates, fraud_rate_baseline]
+    steps:
+      - {id: p4.01, grain: any, text: "NOW isolate the fraud subset; record its row count, share of the population, and the label's exact definition and grain (confirm via the label-consistency check, not assumption)."}
+      - {id: p4.02, grain: any, text: "Baseline fraud rate for the whole population, and by the natural regimes/segments found in p3.03/p3.05 -- does membership in a data-driven segment alone shift the rate?"}
+      - {id: p4.03, grain: transaction, text: "For every p2 anomaly and p3 candidate, run evaluate_feature/percentile_table split by the label. Record IV/KS/AUC AND the percentile separation for each -- reject anything with AUC <= 0.5 despite a strong IV (direction check)."}
+      - {id: p4.04, grain: any, text: "Explicitly list what did NOT survive contact with the label -- candidates that looked structurally interesting in phases 1-3 but show no separation. This list is as valuable as what survived; record it as a finding, not silently drop it."}
+      - {id: p4.05, grain: account, text: "For the clusters/segments from p3.03, compute fraud rate per segment; a segment with a sharply different rate is a validated structural finding, not just a clustering artifact."}
+      - {id: p4.06, grain: any, text: "Cross-check surviving candidates against established_findings (if a domain profile or team knowledge base is loaded) -- is this genuinely new, or a rediscovery? Record either way."}
+      - {id: p4.07, grain: any, text: "Rank the SURVIVING candidates by separation strength. This ranked, validated list is the phase deliverable and the only input to phase 5."}
+      - {id: p4.08, grain: transaction, text: "check_cross_period_stability on the top surviving candidates if a prior story exists on this dataset -- a candidate that separates well but wasn't stable last period is weaker evidence than one that was."}
+      - {id: p4.09, grain: any, text: "For the killed candidates (p4.04), sanity-check at least 2 of them by hand -- confirm the evaluation itself wasn't the problem (wrong grain, wrong window, leakage) before trusting the kill."}
+      - {id: p4.10, grain: any, text: "record_finding for every surviving candidate AND every notable killed one, with predicate set explicitly so a later comparison can't silently mix definitions."}
+
+  # ------------------------------------------------------------------ #
+  - id: p5_account_rollup
+    name: "Roll validated structure up to account grain"
+    purpose: >-
+      Only the candidates that survived phase 4 get aggregated -- rolling
+      up everything from phase 1-3 regardless of whether it separated the
+      classes would just reproduce the top-down method's assumption
+      problem one phase later.
+    data_scope: both
+    grains: [account]
+    outputs: [account_level_validated_features]
+    steps:
+      - {id: p5.01, grain: account, text: "For each surviving transaction-level candidate, define its account-level aggregate (count/mean/max/ratio as appropriate) and state the aggregation window."}
+      - {id: p5.02, grain: account, text: "Re-measure separation (IV/KS/AUC) at the account grain for each rolled-up candidate -- transaction-level separation does not guarantee it survives aggregation."}
+      - {id: p5.03, grain: account, text: "For validated segments/clusters, define the account-level membership feature (e.g. distance to segment centroid, or segment ID as a categorical)."}
+      - {id: p5.04, grain: account, text: "Check for redundancy among the rolled-up features (correlation matrix again, now restricted to survivors) and record which of a correlated pair is stronger."}
+      - {id: p5.05, grain: account, text: "For each rolled-up feature, state the aggregation window explicitly (e.g. 30d trailing) and confirm it is available point-in-time -- an account-level aggregate built over the whole history is a leakage risk if the model will score at an earlier point in the account's life."}
+      - {id: p5.06, grain: account, text: "Re-check missingness at the account grain for entities with too little history to compute a rolled-up feature meaningfully; decide and document the fallback (impute, flag, or exclude)."}
+      - {id: p5.07, grain: account, text: "Sanity-check the account-grain fraud rate distribution across the rolled-up features' quantiles -- confirm the separation found at p5.02 looks the same shape as it did at the transaction grain, not an artifact of the aggregation."}
+      - {id: p5.08, grain: account, text: "Write the account-level validated feature list with, for each feature, the phase-4 finding_id it traces back to. This traceability is the phase deliverable."}
+      - {id: p5.09, grain: account, text: "For dual-sided data (payer/payee or similar), confirm whether the rolled-up feature was computed on the correct node -- re-derive on the other node if the domain profile flags it as more productive."}
+      - {id: p5.10, grain: account, text: "Flag any rolled-up feature whose separation dropped sharply from transaction to account grain; note a hypothesis for why (dilution across many transactions, wrong aggregation function, etc.) rather than silently dropping it."}
+
+  # ------------------------------------------------------------------ #
+  - id: p6_feature_construction
+    name: "Feature construction from validated structure only"
+    purpose: >-
+      Build the feature catalog strictly from what phase 4/5 confirmed --
+      not from what phase 1-3 merely found interesting. This is the
+      discipline boundary of the whole method.
+    data_scope: both
+    grains: [transaction, account]
+    outputs: [feature_catalog]
+    steps:
+      - {id: p6.01, grain: any, text: "build_catalog / build_dual_node_catalog from the validated candidate list only; every row must trace back to a phase-4 finding_id."}
+      - {id: p6.02, grain: any, text: "tier_features and export the catalog; check the AUC-direction guard fired correctly on anything borderline from p4.03."}
+      - {id: p6.03, grain: any, text: "For each core/supporting feature, attach its percentile_table/separation_callout from phase 4 so the catalog documents WHY it's there, not just that it scored well."}
+      - {id: p6.04, grain: any, text: "record_percentile_snapshot for the strongest 5 features, so a later story on refreshed data can check_cross_period_stability against this one."}
+      - {id: p6.05, grain: any, text: "For every feature in the catalog, confirm its `code` field (the reproducing snippet) actually runs standalone against a fresh load of the data -- a catalog entry that can't be reproduced is not a real deliverable."}
+      - {id: p6.06, grain: any, text: "Write the one-sentence description for each feature in plain language a non-technical reviewer could read -- if you can't write it plainly, the feature is probably not well understood yet."}
+      - {id: p6.07, grain: any, text: "Cross-check the catalog against exclude_from_features / avoid_analyses in the loaded domain profile (if any) -- confirm nothing vetoed made it in by a different name."}
+      - {id: p6.08, grain: any, text: "For dual-node features (p5.09), confirm both node variants are present in the catalog with distinct, correctly-suffixed names, not accidentally collapsed into one."}
+      - {id: p6.09, grain: any, text: "Save the feature catalog report (save_report) with the full claim chain from phase 4 attached, not just the final tiered table."}
+      - {id: p6.10, grain: any, text: "Open a chapter (feature-catalog, per the taxonomy) if one isn't already open, so this catalog build is recorded against this exact data version for future dedup."}
+
+  # ------------------------------------------------------------------ #
+  - id: p7_selection_readiness
+    name: "Selection and model readiness"
+    purpose: >-
+      Prepare the validated, tiered catalog for modelling -- redundancy
+      pruning, leakage check, and an explicit request for modelling
+      authorisation.
+    data_scope: both
+    grains: [account]
+    outputs: [model_ready_feature_set]
+    steps:
+      - {id: p7.01, grain: account, text: "check_leakage across the final feature set."}
+      - {id: p7.02, grain: account, text: "Final redundancy pass: drop the weaker of any pair above the correlation threshold, keeping the one with better real-world provenance (not just marginally higher IV)."}
+      - {id: p7.03, grain: account, text: "Summarise the claim chain: which population-wide structural observation (phase 1-3) led to which validated feature (phase 4-6) -- this traceability is the method's actual deliverable, not just the feature list."}
+      - {id: p7.04, grain: account, text: "request_modeling_authorisation with that summary."}
+      - {id: p7.05, grain: account, text: "Confirm sample-frame discipline end to end: every surviving feature's evidence traces to a declared sample_frame, and no population-estimate claim rode in on a within-stratum measurement."}
+      - {id: p7.06, grain: account, text: "Final export grain check: confirm the modelling frame is one row per entity with no duplicate keys before handing off."}
+      - {id: p7.07, grain: account, text: "Write down, explicitly, the ratio of what phase 1-3 found interesting to what phase 4 actually validated -- this ratio is the method's own honesty check on how much of 'looked structural' survives contact with the label."}
+      - {id: p7.08, grain: account, text: "Save the final report with the full phase 1->7 narrative attached, so a reviewer can audit the reasoning chain, not just the final feature list."}
+      - {id: p7.09, grain: account, text: "If modelling is authorised, hand off the model-ready feature set; if not, record the reviewer's stated reason as a decision on the dataset card for the next session."}
+      - {id: p7.10, grain: account, text: "Update the chapter/story with a closing page summarising what this run added to the book, so /library correctly reflects this methodology's contribution on the next session."}
