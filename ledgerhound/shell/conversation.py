@@ -581,8 +581,6 @@ def _norm_args_for_failure(args: dict) -> str:
         return str(args)
     return str(sorted(args.items()))
 
-_BLOCKED = ("import os", "import sys", "import subprocess", "import shutil",
-            "open(", "__import__", "eval(", "exec(", "requests.", "socket.")
 
 
 def _ts() -> str:
@@ -942,10 +940,6 @@ class ConversationalAnalyst:
         # V3-032: same contract, for the leakage check (target-derived /
         # leak-lexicon-named columns).
         self._leakage_issues_seen: set[str] = set()
-        # V5-003: repeat advice on every cell is noise, and noise is
-        # what gets a check switched off.
-        self._stat_issues_seen: set = set()
-        self._stat_advisory: str = ""
         # V3-032 Tier 4: same contract, for the output-grain check
         # (duplicate account rows in an exported feature sheet).
         self._grain_issues_seen: set[str] = set()
@@ -1018,6 +1012,28 @@ class ConversationalAnalyst:
         # V6.3 postmortem "Filter 1": the verbatim first user turn, captured
         # in send() before anything distills it. See SessionGoal.origin_instruction.
         self._first_user_turn_text = ""
+        # Guardrails (ledgerhound.shell.guardrails). Providers are lambdas
+        # because goal/methodology are replaced during a session.
+        from ledgerhound.shell.guardrails import (
+            ExecBlocklist,
+            ExportGrainGate,
+            ModelingGate,
+            RestatementGuard,
+            StatisticalAssumptionsGate,
+        )
+        self._stat_gate = StatisticalAssumptionsGate(
+            n_rows=self._true_frame_rows,
+            on_issue=lambda **kw: self._events.append("stat_check", **kw))
+        self._code_gates = [
+            ModelingGate(lambda: self.goal, lambda: self.methodology),
+            ExportGrainGate(lambda: self.goal, lambda: self.methodology,
+                            self._export_frames),
+            # V5-003: the first gate that looks at INFERENCE rather than
+            # data -- valid code, invalid conclusion.
+            self._stat_gate,
+        ]
+        self._exec_blocklist = ExecBlocklist()
+        self._restatement_guard = RestatementGuard()
         self.registry = registry or self._default_registry(gate)
 
         sys_prompt = SYSTEM_PROMPT
@@ -2357,32 +2373,18 @@ class ConversationalAnalyst:
         # GOAL GATES (blocking, not advisory). The 2026-08-06 production run
         # showed an advisory grain warning being acknowledged in a code
         # comment and then ignored ("This is intentional"), and hours spent
-        # training models that were never authorised. These REFUSE.
-        refusal = self.goal.check_modeling(code, methodology=self.methodology)
-        if refusal:
-            self._events.append("goal_gate", kind="modeling_unauthorised",
-                                code=code[:500])
-            return refusal
-        refusal = self._precheck_export_grain(code)
-        if refusal:
-            self._events.append("goal_gate", kind="grain_violation",
-                                code=code[:500])
-            return refusal
-        # V5-003: the first check in this chain that looks at INFERENCE rather
-        # than data. Static, so it only catches misuse visible in the code --
-        # but that is the class Fisher-R1 found agents making: valid code,
-        # invalid conclusion.
-        refusal = self._check_test_assumptions(code)
-        if refusal:
-            self._events.append("goal_gate", kind="invalid_test",
-                                code=code[:500])
-            return refusal
+        # training models that were never authorised. These REFUSE. See
+        # ledgerhound.shell.guardrails for each gate.
+        for gate in self._code_gates:
+            refusal = gate.check(code)
+            if refusal:
+                self._events.append("goal_gate", kind=gate.kind, code=code[:500])
+                return refusal
         if self._kernel_active and self._kernel is not None:
             return self._run_python_kernel(code)
-        low = code.lower()
-        for bad in _BLOCKED:
-            if bad in low:
-                return f"blocked: '{bad}' is not allowed in the sandbox (df/pd/np are in scope)."
+        refusal = self._exec_blocklist.check(code)
+        if refusal:
+            return refusal
         if self._ns is None:
             import numpy as np
 
@@ -2514,7 +2516,7 @@ class ConversationalAnalyst:
         text = self._compact_cell_output(out)
         for block in (delta_block, check_block, leakage_block, grain_block,
                      numeric_block, ambiguity_block, memory_block,
-                     getattr(self, "_stat_advisory", "")):
+                     self._stat_gate.advisory):
             if block:
                 text = f"{text}\n\n{block}" if text else block
         return text if text.strip() else "(ran; no output -- print() what you want to see)"
@@ -2559,41 +2561,15 @@ class ConversationalAnalyst:
                     "claim.")
         return out
 
-    def _check_test_assumptions(self, code: str) -> str:
-        """V5-003. Returns a REFUSAL string for a test that cannot be valid as
-        written, an advisory block for one that merely needs care, or "".
-
-        The advisory is stashed on the instance and appended to the cell
-        output by the caller, so a cell that runs still carries the caveat
-        with the numbers it produced rather than in a separate turn.
-        """
-        self._stat_advisory = ""
+    def _true_frame_rows(self) -> int | None:
+        """Row count of the loaded frame, or None when only a schema sample
+        is held (the real data lives in the kernel)."""
+        if self._df is None or self._df_is_sample:
+            return None
         try:
-            from ledgerhound.shell.stat_checks import (
-                check_statistical_assumptions,
-                is_blocking,
-                render,
-            )
-            n_rows = None
-            if self._df is not None and not self._df_is_sample:
-                try:
-                    n_rows = int(len(self._df))
-                except Exception:  # noqa: BLE001
-                    n_rows = None
-            issues = check_statistical_assumptions(
-                code, n_rows=n_rows, seen=self._stat_issues_seen)
-            if not issues:
-                return ""
-            block = render(issues)
-            for i in issues:
-                self._events.append("stat_check", test=i.test, kind=i.kind,
-                                    blocking=i.blocking, detail=i.message[:1000])
-            if is_blocking(issues):
-                return block
-            self._stat_advisory = block
-            return ""
-        except Exception:  # noqa: BLE001 -- a check must never break a cell
-            return ""
+            return int(len(self._df))
+        except Exception:  # noqa: BLE001
+            return None
 
     def _check_data_comparability(self, code: str = "") -> str:
         """Mechanical time-window comparability check over the sandbox's
@@ -2774,7 +2750,7 @@ class ConversationalAnalyst:
         # execution paths -- a caveat that only appeared in exec mode would be
         # missing from exactly the GPU runs that matter most.
         for block in ([delta_block, memory_block] + kernel_blocks
-                      + [getattr(self, "_stat_advisory", "")]):
+                      + [self._stat_gate.advisory]):
             if block:
                 text = f"{text}\n\n{block}" if text else block
         return text if text.strip() else "(ran; no output -- print() what you want to see)"
@@ -2819,41 +2795,28 @@ class ConversationalAnalyst:
         except Exception:  # noqa: BLE001 -- recognition must never break a load
             return ""
 
-    def _precheck_export_grain(self, code: str) -> str:
-        """Check the grain of frames about to be exported BEFORE the write
-        runs, so a wrong-grain deliverable is never produced at all.
-
-        Only frames that already exist can be inspected -- one created and
-        exported inside the same cell is caught by the post-execution check
-        instead. Best-effort: any failure here returns "" (allow), because a
-        broken gate must not block legitimate work."""
-        if not self.goal.is_set() or self.goal.unit_of_analysis != "account":
-            return ""
-        try:
-            from ledgerhound.shell.session_goal import _EXPORT_RE
-            if not _EXPORT_RE.search(code):
-                return ""
-            frames: dict = {}
-            if self._kernel_active and self._kernel is not None:
-                from ledgerhound.shell.kernel_checks import collect_payload
-                # force the (otherwise export-gated) duplicate scan
-                frames = collect_payload(self._kernel, "to_csv(")
-            elif self._ns:
-                from ledgerhound.shell.data_checks import _is_frame
-                from ledgerhound.shell.grain_checks import _entity_key_col
-                for k, v in self._ns.items():
-                    if str(k).startswith("_") or not _is_frame(v):
-                        continue
-                    col = self.goal.entity_key or _entity_key_col(v)
-                    if not col or col not in getattr(v, "columns", []):
-                        continue
-                    n = len(v)
-                    frames[str(k)] = {"n_rows": n,
-                                      "dup_keys": {col: int(n - v[col].nunique())}}
-            return self.goal.check_export(code, frames,
-                                          methodology=self.methodology)
-        except Exception:  # noqa: BLE001 -- a broken gate must not block work
-            return ""
+    def _export_frames(self) -> dict:
+        """``{var: {"n_rows", "dup_keys": {entity_col: n}}}`` for the frames
+        that exist right now -- what ExportGrainGate judges before a write.
+        Kernel mode computes it inside the kernel; exec mode reads _ns."""
+        frames: dict = {}
+        if self._kernel_active and self._kernel is not None:
+            from ledgerhound.shell.kernel_checks import collect_payload
+            # force the (otherwise export-gated) duplicate scan
+            return collect_payload(self._kernel, "to_csv(")
+        if self._ns:
+            from ledgerhound.shell.data_checks import _is_frame
+            from ledgerhound.shell.grain_checks import _entity_key_col
+            for k, v in self._ns.items():
+                if str(k).startswith("_") or not _is_frame(v):
+                    continue
+                col = self.goal.entity_key or _entity_key_col(v)
+                if not col or col not in getattr(v, "columns", []):
+                    continue
+                n = len(v)
+                frames[str(k)] = {"n_rows": n,
+                                  "dup_keys": {col: int(n - v[col].nunique())}}
+        return frames
 
     def _run_kernel_checks(self, code: str) -> list[str]:
         """Kernel-mode counterpart to the four exec-mode checks that need
@@ -2975,56 +2938,6 @@ class ConversationalAnalyst:
             out += f"\n{tail}"
         return out
 
-    # Words too common in fraud-analytics prose to distinguish two claims.
-    _CLAIM_STOPWORDS = frozenset("""
-        a an and are as at be been by for from has have in is it its of on or
-        that the this to with which while when where than then these those
-        show shows showed shown indicate indicates higher lower high low more
-        less most least very rate rates fraud fraudulent non nonfraud data
-        dataset transaction transactions txn account accounts analysis
-        observed observation appears appear seem seems significant
-        significantly increase increases increased decrease decreases across
-        between compared comparison overall total count counts value values
-        """.split())
-
-    def _claim_tokens(self, s: str) -> set:
-        raw = re.findall(r"[a-z0-9]+", (s or "").lower())
-        return {t for t in raw if len(t) > 1 and t not in self._CLAIM_STOPWORDS}
-
-    def _claims_match(self, mine: set, theirs: set) -> bool:
-        """Both bars: enough absolute overlap to be the same subject, and
-        enough of the known claim covered that it is a restatement rather
-        than a passing mention. Deliberately crude -- distinctive-token
-        overlap, no semantics. False positives cost one sentence of
-        pushback; the alternative cost four review iterations that
-        produced "no substantially new fraud insights"."""
-        if not mine or not theirs:
-            return False
-        shared = mine & theirs
-        return len(shared) >= 3 and len(shared) / len(theirs) >= 0.5
-
-    def _restates_established_finding(self, claim: str) -> tuple[str, str]:
-        """``(finding_id, established_claim)`` if `claim` looks like a
-        restatement of a domain-profile established finding specifically.
-        Kept as its own method (rather than folded into
-        `_check_all_known_sources`) because its message is worded around
-        "the reviewer already accepted this" -- a different framing than a
-        cross-book or team-KB match."""
-        prof = self._domain_profile
-        if not prof or not claim:
-            return ("", "")
-        try:
-            from ledgerhound.context.domain_profiles import established_claims
-        except Exception:  # noqa: BLE001
-            return ("", "")
-        mine = self._claim_tokens(claim)
-        if not mine:
-            return ("", "")
-        for fid, known in established_claims(prof):
-            if self._claims_match(mine, self._claim_tokens(known)):
-                return (fid, known)
-        return ("", "")
-
     def _book_history_claims(self) -> list[tuple[str, str]]:
         """(ref, claim) for every finding recorded on THIS book across
         every past session/story -- DatasetCard.finding_refs is already a
@@ -3075,25 +2988,6 @@ class ConversationalAnalyst:
         except Exception:  # noqa: BLE001 -- advisory, never blocks a run
             return out
 
-    def _check_all_known_sources(self, claim: str) -> list[tuple[str, str, str]]:
-        """(source, ref, matched_text) for every known-claim source this
-        claim looks like a restatement of: the domain profile (handled
-        separately by `_restates_established_finding` for its own
-        wording), this book's own cross-session history, and the team
-        knowledge base. Used to BLOCK an unjustified restatement at
-        record_finding time, not just warn after recording."""
-        mine = self._claim_tokens(claim)
-        if not mine:
-            return []
-        matches = []
-        for ref, known in self._book_history_claims():
-            if self._claims_match(mine, self._claim_tokens(known)):
-                matches.append(("this book's history", ref, known))
-        for name, known in self._team_kb_claims():
-            if self._claims_match(mine, self._claim_tokens(known)):
-                matches.append(("the team knowledge base", name, known))
-        return matches
-
     def _tool_record_finding(self, claim: str, sample_frame: str,
                              evidence: str = "", predicate: str = "",
                              delta: str = "", pvalue: float = None) -> str:
@@ -3105,49 +2999,22 @@ class ConversationalAnalyst:
         explicitly what this claim adds before it lands. A `delta` (or no
         match at all) proceeds to record normally, with the delta folded
         into the evidence trail when given."""
-        # V3-048's domain-profile check keeps its own wording (references
-        # "the reviewer already accepted this"); cross-book/team-KB matches
-        # get a differently-worded, source-labelled refusal below.
         # V5-002: every attempt joins the family, including the ones refused
         # below. Counting only successes would make a long fruitless search
         # look like a short decisive one.
         self._effort.note_attempt(getattr(self, "_current_chapter", ""))
 
-        fid, known = self._restates_established_finding(claim)
-        other_matches = self._check_all_known_sources(claim)
-
-        if (fid or other_matches) and not delta.strip():
+        refusal, detail = self._restatement_guard.check(
+            claim, delta, domain_profile=self._domain_profile,
+            book_claims=self._book_history_claims(),
+            team_claims=self._team_kb_claims())
+        if refusal:
             self._events.append("finding_blocked_as_restatement",
-                                claim=claim[:500],
-                                domain_profile_match=fid or "",
-                                other_matches=[m[0] for m in other_matches])
-            self._note_no_new_finding()
+                                claim=claim[:500], **detail)
             self._effort.note_refused(getattr(self, "_current_chapter", ""))
-            stall = self._stall_suggestion()
-            if fid:
-                msg = (
-                    f"REFUSED (not recorded) -- this looks like established "
-                    f"finding [{fid}], which the reviewer has already "
-                    f"accepted:\n  \"{known}\"\n"
-                    "Re-deriving accepted results is what made four review "
-                    "iterations produce no new insight. Call record_finding "
-                    "again with the SAME claim plus delta=\"...\" stating "
-                    "what this specifically ADDS (a mechanism, an "
-                    "interaction, account-level behaviour, a feature it "
-                    "justifies) -- or drop it and move on.")
-                return f"{msg}\n{stall}" if stall else msg
-            lines = ["REFUSED (not recorded) -- this looks like a restatement of:"]
-            for source, ref, known_claim in other_matches:
-                lines.append(f"  [{source}] {ref}: \"{known_claim}\"")
-            lines.append(
-                "Call record_finding again with the SAME claim plus "
-                "delta=\"...\" stating what this specifically ADDS beyond "
-                "what's already known -- or drop it and move on.")
-            if stall:
-                lines.append(stall)
-            return "\n".join(lines)
+            return refusal
 
-        self._note_new_finding()
+        self._restatement_guard.note_recorded()
         full_evidence = f"{evidence}\n[delta: {delta}]" if delta.strip() else evidence
         # V3-012: findings.jsonl is now a projection of the event stream --
         # the same view function backs both this live write and
@@ -3159,7 +3026,10 @@ class ConversationalAnalyst:
         # Real bug this reproduces: fraud night-share computed as
         # hour>=22 OR hour<6, non-fraud night-share as hour in 0..5 --
         # compared directly as if they measured the same thing.
-        predicate_warning = self._check_predicate_consistency(claim, predicate)
+        # (Checked before this finding is appended to findings.jsonl.)
+        from ledgerhound.shell.guardrails import PredicateConsistencyCheck
+        predicate_warning = PredicateConsistencyCheck.check(
+            claim, predicate, self._findings_path)
         try:
             from ledgerhound.runtime.views import finding_line
             with open(self._findings_path, "a", encoding="utf-8") as f:
@@ -3199,85 +3069,8 @@ class ConversationalAnalyst:
             base += f" -- {assessment.status.upper()}"
         if delta.strip():
             base += " (with stated delta over a known match)"
-        stall = self._stall_suggestion()
-        parts = [p for p in (base, assessment.note, predicate_warning, stall) if p]
+        parts = [p for p in (base, assessment.note, predicate_warning) if p]
         return "\n".join(parts)
-
-    def _note_new_finding(self) -> None:
-        """V3-061 stop-heuristic: reset the consecutive-no-new-finding
-        counter on anything that actually got recorded."""
-        self._consecutive_no_new_finding = 0
-
-    def _note_no_new_finding(self) -> None:
-        """V3-061 stop-heuristic: count a blocked (restatement, no delta)
-        record_finding attempt as "this step found nothing new". No
-        automatic ceiling -- add_step/the phase checklist can grow
-        indefinitely -- this only ever SUGGESTS wrapping up, never forces
-        it (see `_stall_suggestion`)."""
-        self._consecutive_no_new_finding = getattr(
-            self, "_consecutive_no_new_finding", 0) + 1
-
-    def _stall_suggestion(self, threshold: int = 3) -> str:
-        n = getattr(self, "_consecutive_no_new_finding", 0)
-        if n < threshold:
-            return ""
-        return (
-            f"NOTE: the last {n} finding attempts in a row were restatements "
-            "of something already known, with no new delta stated. Consider "
-            "whether this chapter/phase has run its course -- wrap up and "
-            "move on, or open_chapter on a genuinely different approach. "
-            "Not forced; your call.")
-
-    def _check_predicate_consistency(self, claim: str, predicate: str) -> str:
-        """V3-052: if a prior finding shares this claim's distinctive
-        subject (same token-overlap test as `_restates_established_
-        finding`, applied to this run's OWN findings.jsonl instead of the
-        domain profile) but was recorded under a DIFFERENT, non-empty
-        predicate, flag it. Two findings that sound like they measure the
-        same thing but used different windows/conditions are not
-        comparable -- that mismatch is exactly what produced the
-        7.8%-vs-31.9%-vs-31.7% weekend-share contradiction. Mechanical
-        token overlap, not semantic -- a false positive costs one line of
-        pushback, same tradeoff as the restatement check above."""
-        if not predicate or not claim or not self._findings_path.exists():
-            return ""
-
-        def _toks(s: str) -> set:
-            raw = re.findall(r"[a-z0-9]+", (s or "").lower())
-            return {t for t in raw
-                    if len(t) > 1 and t not in self._CLAIM_STOPWORDS}
-
-        mine = _toks(claim)
-        if not mine:
-            return ""
-        try:
-            lines = self._findings_path.read_text(encoding="utf-8").splitlines()
-        except Exception:
-            return ""
-        for line in lines:
-            if not line.strip():
-                continue
-            try:
-                rec = json.loads(line)
-            except Exception:
-                continue
-            other_claim = rec.get("claim", "")
-            other_pred = rec.get("predicate", "")
-            if not other_pred or other_pred == predicate:
-                continue
-            theirs = _toks(other_claim)
-            if not theirs:
-                continue
-            shared = mine & theirs
-            if len(shared) >= 3 and len(shared) / len(theirs) >= 0.5:
-                return (
-                    "NOTE: this looks like it measures the same thing as an "
-                    f"earlier finding (\"{other_claim}\"), but under a "
-                    f"DIFFERENT predicate -- this one: \"{predicate}\", the "
-                    f"earlier one: \"{other_pred}\". Do not compare the two "
-                    "numbers directly until you've confirmed they use the "
-                    "same condition/window.")
-        return ""
 
     def _tool_record_decision(self, decision: str, rationale: str = "") -> str:
         if self._card is None:
@@ -3322,18 +3115,8 @@ class ConversationalAnalyst:
         except Exception:
             pass
         if not allowed:
-            pages = info.get("pages", [])
-            found = "\n".join(f"  - {p}" for p in pages[-5:])
-            return (
-                f"REFUSED: chapter '{chapter}' already has {info.get('page_count', 0)} "
-                f"page(s) recorded against this EXACT data version.\n"
-                f"What was already found:\n{found}\n\n"
-                "If you have a real reason to redo it anyway (the first "
-                "pass was buggy, wrong assumption, etc.), call "
-                "redo_chapter(chapter, reason) -- that is recorded, not "
-                "silent. If the data has genuinely changed since, re-load "
-                "it first; a new content hash opens a new story "
-                "automatically and this chapter reopens on its own.")
+            from ledgerhound.shell.guardrails import ChapterDedupeGate
+            return ChapterDedupeGate.refusal(chapter, info)
         self._current_chapter = chapter
         return f"opened chapter '{chapter}'."
 
@@ -3880,16 +3663,13 @@ class ConversationalAnalyst:
                                 detail=msg[:1000])
             return msg
 
-        if ph is not None and not force and not self._reports_by_phase.get(ph.id):
-            self._events.append("phase_advance_refused",
-                                phase=ph.id, reason="no_report_saved")
-            return (
-                f"REFUSED: phase '{ph.id}' has no saved report.\n"
-                "Every phase leaves an artifact -- call save_report with this "
-                "phase's findings before advancing, so the run folder shows "
-                "what each phase actually produced.\n"
-                "If this phase genuinely has nothing to report, "
-                "advance_phase(force=True) moves on and records the gap.")
+        if ph is not None:
+            from ledgerhound.shell.guardrails import PhaseReportGate
+            refusal = PhaseReportGate.check(ph.id, self._reports_by_phase, bool(force))
+            if refusal:
+                self._events.append("phase_advance_refused",
+                                    phase=ph.id, reason="no_report_saved")
+                return refusal
         if ph is not None and force and not self._reports_by_phase.get(ph.id):
             self._events.append("phase_closed_without_report", phase=ph.id)
 
