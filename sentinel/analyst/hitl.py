@@ -63,6 +63,30 @@ def auto_yes(question: str, options: list[str]) -> str:
     return options[0] if options else "yes"
 
 
+_APPROVE_WORDS = frozenset({"y", "yes", "ok", "okay", "approve", "approved",
+                            "proceed", "go", "true"})
+
+
+def resolve_high_answer(raw: Optional[str], options) -> str:
+    """Map a raw high-tier answer onto one of `options`, failing CLOSED.
+
+    `options[0]` approves and `options[-1]` declines. An exact
+    (case-insensitive) option match wins; otherwise only an explicit
+    approval word ("y", "yes", "proceed", ...) approves. Everything else --
+    "no", "n", empty input, typos, unknown words -- declines. Before this,
+    any answer that wasn't literally an option snapped to options[0], so
+    typing "no" or "n" APPROVED a high-risk action.
+    """
+    options = list(options)
+    ans = (raw or "").strip().lower()
+    for opt in options:
+        if ans == opt.lower():
+            return opt
+    if ans in _APPROVE_WORDS:
+        return options[0]
+    return options[-1]
+
+
 @dataclass
 class HITLDecision:
     question: str
@@ -165,9 +189,7 @@ class HITLGate:
               "options": list(options), "recommendation": recommendation,
               "consequence": consequence}
         text = self._render_package(pkg)
-        ans = (self.prompt(text, list(options)) or options[0]).strip()
-        if ans not in options:
-            ans = options[0]
+        ans = resolve_high_answer(self.prompt(text, list(options)), options)
         approved = ans == options[0]
         return self._record(HITLDecision(question, "high", ans, approved, package=pkg))
 
@@ -203,9 +225,7 @@ class HITLGate:
         lines.append("\nApprove all, or cancel all?")
         text = "\n".join(lines)
         options = ("proceed", "cancel")
-        ans = (self.prompt(text, list(options)) or options[0]).strip()
-        if ans not in options:
-            ans = options[0]
+        ans = resolve_high_answer(self.prompt(text, list(options)), options)
         approved = ans == options[0]
         return [self._record(HITLDecision(pkg["question"], "high", ans, approved,
                                           package=pkg))

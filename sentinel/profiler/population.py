@@ -293,12 +293,15 @@ ORDER BY c.cnt DESC
                 for p in pcts
             ]
 
+        # Joined outside the f-string: a backslash inside an f-string
+        # expression is a SyntaxError before Python 3.12.
+        pct_sql = ",\n    ".join(pct_exprs)
         return f"""
 -- Population percentiles: {feature}
 SELECT
     '{feature}' AS feature,
     COUNT(*) AS n,
-    {',\n    '.join(pct_exprs)}
+    {pct_sql}
 FROM {full_table}
 {where}
 """.strip()
