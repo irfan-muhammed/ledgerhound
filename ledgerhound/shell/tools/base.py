@@ -26,7 +26,7 @@ class AnalystToolsBase:
                  renderer: Callable[[str], None] = print, registry=None,
                  gate=None, autonomous: bool = False, use_kernel: bool = False,
                  methodology: str = "", methodology_mode: str = "",
-                 isolation=None):
+                 isolation=None, exec_fallback: bool = True):
         self.project = project
         self.render = renderer
         # The LLM driving this session, if any. The tool layer only reads
@@ -57,6 +57,11 @@ class AnalystToolsBase:
         self.isolation = isolation
         self.isolation_report = None
         self._kernel_refusal = ""
+        # exec_fallback=False (MCP mode): code runs ONLY in the kernel. When
+        # the kernel is missing or failed to start, run_python refuses and
+        # says why (_kernel_note) instead of running in-process.
+        self.exec_fallback = exec_fallback
+        self._kernel_note = ""
         self.run_dir = Path(out_root) / _ts()
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self._df: pd.DataFrame | None = None
@@ -252,11 +257,16 @@ class AnalystToolsBase:
         # pre-gate a whole response's simultaneous tool_calls as one batch
         # (see the native tool_calls handling below); a single high-tier
         # call with no batch gates itself right here.
+        from ledgerhound.shell.approvals import NeedsPersonDecision
         if tier == "high":
-            decision = high_tier_decision if high_tier_decision is not None \
-                else self.registry.gate.high(**self._decision_package(name, args))
+            try:
+                decision = high_tier_decision if high_tier_decision is not None \
+                    else self.registry.gate.high(**self._decision_package(name, args))
+            except NeedsPersonDecision as e:
+                return self._needs_person(name, e)
             self._log("hitl", tier="high", name=name, approved=decision.approved,
-                      answer=decision.answer)
+                      answer=decision.answer,
+                      approved_by=getattr(decision, "approved_by", "person"))
             if not decision.approved:
                 result = (f"declined: {name} was not approved this turn -- "
                           f"do not retry it; ask what they want instead.")
@@ -271,7 +281,10 @@ class AnalystToolsBase:
         # ledgerhound.eval.fluidity for the one consumer updated to match.
         from ledgerhound.tools.config_tools import redact_args
         self._log("tool_call", name=name, args=redact_args(name, args))
-        result = self._dispatch(name, args)
+        try:
+            result = self._dispatch(name, args)
+        except NeedsPersonDecision as e:
+            return self._needs_person(name, e)
         sig = _failure_signature(result)
         success = sig is None
         if success and name not in _PLAN_META_TOOLS:
@@ -310,6 +323,23 @@ class AnalystToolsBase:
 
         self._log("tool_result", name=name, result=result[:2000], success=success)
         return result
+
+    def _needs_person(self, name: str, e) -> str:
+        """A tool stopped for a person's decision nobody has given yet (MCP
+        without elicitation). Not a failure and not evidence: the agent is
+        told exactly what to ask and how to retry."""
+        result = e.tool_result(name)
+        self._log("hitl", tier="pending", name=name, approved=False,
+                  answer="", approved_by="nobody yet", question=e.question[:500])
+        self._log("tool_result", name=name, result=result[:2000], success=False)
+        return result
+
+    def agent_approvals(self) -> list:
+        """Decisions an MCP host agent relayed (approved_by="agent"): every
+        report flags these as approved by the agent, not verified by a person."""
+        gate = getattr(self.registry, "gate", None)
+        return [d for d in getattr(gate, "log", [])
+                if getattr(d, "approved_by", "") == "agent"]
 
     def _decision_package(self, name: str, args: dict) -> dict:
         """V3-016: builds the {question, findings_so_far, options,

@@ -224,3 +224,21 @@ def test_required_isolation_refuses_instead_of_falling_back(monkeypatch, tmp_pat
         assert s._run_tool("run_python", {"code": "print(1)"}).startswith("REFUSED")
     finally:
         s.close()
+
+
+@needs_bwrap
+def test_full_sandboxed_session_sees_its_data(tmp_path, fraud_csv):
+    # The dataset lives under /tmp here, which the sandbox replaces with a
+    # private tmpfs: it must be re-exposed read-only or df never loads.
+    from ledgerhound.shell.tools import AnalystTools
+    s = AnalystTools(out_root=tmp_path / "runs", renderer=lambda _: None,
+                     use_kernel=True, exec_fallback=False,
+                     isolation=IsolationPolicy(mode="require"))
+    try:
+        loaded = s._run_tool("load_data", {"path": str(fraud_csv)})
+        assert "isolation: sandboxed" in loaded
+        out = s._run_tool("run_python", {
+            "code": "print(df.groupby('is_fraud').amount.mean().round(1).to_dict())"})
+        assert "550.0" in out, out
+    finally:
+        s.close()

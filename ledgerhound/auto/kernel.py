@@ -359,7 +359,8 @@ class KernelExecutor:
         home = self._kernel_dir / "home"
         home.mkdir()
         writable = [self._scratch, self._features_dir, self._kernel_dir]
-        plan = policy.plan(writable=writable, home=home)
+        readable = [Path(self._data_path)] if self._data_path else []
+        plan = policy.plan(writable=writable, home=home, readable=readable)
         self.isolation_report = dataclasses.replace(plan.report,
                                                     cell_timeout_s=self._timeout)
 

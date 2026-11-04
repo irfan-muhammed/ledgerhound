@@ -119,9 +119,12 @@ class IsolationPolicy:
 
     # ------------------------------------------------------------------ #
 
-    def plan(self, writable: list[Path], home: Path) -> LaunchPlan:
+    def plan(self, writable: list[Path], home: Path,
+             readable: list[Path] | None = None) -> LaunchPlan:
         """Build the launch for a kernel that may write only to `writable`
-        (plus a private /tmp) and whose HOME is `home` (must be in writable)."""
+        (plus a private /tmp) and whose HOME is `home` (must be in writable).
+        `readable` (the dataset) is re-exposed read-only even where the
+        sandbox hides the host path, e.g. a dataset under /tmp."""
         if self.mode == "off":
             return LaunchPlan(prefix=[], env=None, transport="tcp", rss_limit_bytes=None,
                               report=IsolationReport(
@@ -138,7 +141,7 @@ class IsolationPolicy:
         transport = "tcp"
         network, writes = "open", "unrestricted"
         if sys.platform.startswith("linux") and bwrap_works():
-            prefix += bwrap_args(writable)
+            prefix += bwrap_args(writable, readable or [])
             transport, network, writes = "ipc", "blocked", "confined"
         elif sys.platform.startswith("linux"):
             missing.append("bwrap unavailable or blocked (install bubblewrap; "
@@ -199,9 +202,10 @@ def kernel_env(home: Path, extra: dict[str, str] | None = None) -> dict[str, str
     return env
 
 
-def bwrap_args(writable: list[Path]) -> list[str]:
-    """Read-only root, private /tmp and /dev/shm, read-write only `writable`,
-    and a fresh network namespace (loopback only)."""
+def bwrap_args(writable: list[Path], readable: list[Path] = ()) -> list[str]:
+    """Read-only root, private /tmp, /run and /dev/shm, read-write only
+    `writable`, `readable` re-exposed read-only, and a fresh network
+    namespace (loopback only)."""
     args = ["bwrap", "--ro-bind", "/", "/",
             "--dev-bind", "/dev", "/dev",        # keeps GPU device nodes
             "--tmpfs", "/dev/shm",               # but not the host's shared memory
@@ -219,6 +223,11 @@ def bwrap_args(writable: list[Path]) -> list[str]:
         if rp not in seen:
             seen.add(rp)
             args += ["--bind", rp, rp]
+    for p in readable:
+        rp = str(Path(p).resolve())
+        if rp not in seen and Path(rp).exists():
+            seen.add(rp)
+            args += ["--ro-bind", rp, rp]
     args += ["--unshare-net", "--die-with-parent", "--"]
     return args
 

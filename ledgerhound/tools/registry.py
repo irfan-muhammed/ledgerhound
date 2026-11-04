@@ -116,6 +116,11 @@ class ToolRegistry:
         try:
             result = tool.fn(**args)
         except Exception as e:  # noqa: BLE001
+            # A pending person decision is not a tool error: the caller turns
+            # it into instructions to ask (ledgerhound.shell.approvals).
+            from ledgerhound.shell.approvals import NeedsPersonDecision
+            if isinstance(e, NeedsPersonDecision):
+                raise
             return f"error running {name}: {type(e).__name__}: {e}{_where(e)}"
         self.action_log.append(f"{name}: {_summ(args)}")
         return result if isinstance(result, str) else str(result)

@@ -56,6 +56,12 @@ class PythonToolsMixin:
                     "isolated kernel is running, and code never runs in-process "
                     "under that flag. Install the kernel dependencies "
                     "(pip install 'ledgerhound[mcp]') and reload the data.")
+        if not self.exec_fallback:
+            why = (self._kernel_note.strip("() ") if self._kernel_note
+                   else "kernel mode is off")
+            return ("REFUSED: code runs only in the isolated analysis kernel, "
+                    f"and none is running ({why}). Nothing was executed. Fix the "
+                    "kernel (pip install 'ledgerhound[mcp]') and reload the data.")
         refusal = self._exec_blocklist.check(code)
         if refusal:
             return refusal

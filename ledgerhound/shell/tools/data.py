@@ -131,6 +131,7 @@ class DataToolsMixin:
         self._load_card_for(resolved, self._dataset_id, data_hash)  # V3-011: may pre-seed self._digest
         self._refresh_schema_pin()  # visible to the rest of THIS turn, not just the next
         kernel_note = self._start_kernel_for(resolved) if self.use_kernel else ""
+        self._kernel_note = kernel_note
         cols = ", ".join(map(str, df.columns[:40]))
         n_disp = self._rows_display()
         msg = (f"loaded {resolved} -> df with {n_disp} rows x "
