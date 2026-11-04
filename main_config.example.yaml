@@ -132,6 +132,14 @@ paths:
 #                                # groupby on crore-scale data on the CPU
 #                                # fallback can legitimately take minutes.
 #                                # env fallback: LEDGERHOUND_CELL_TIMEOUT
+#                                # Wall-clock for the whole cell.
+#   isolation: off               # off | best | require (ADR 0001). `best`
+#                                # sandboxes what this machine allows and
+#                                # reports the level; `require` refuses to run
+#                                # code below "sandboxed". The MCP server
+#                                # defaults to best. env: LEDGERHOUND_ISOLATION
+#   memory_max_gb: 0             # kernel memory cap; 0 = 80% of physical RAM.
+#                                # env: LEDGERHOUND_KERNEL_MEMORY_GB
 
 # The team object store (S3-compatible Ceph at a payments organization): tokenizers, /s3 data,
 # uploaded feature tables and the shared team knowledge base. It needs BOTH

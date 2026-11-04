@@ -398,12 +398,24 @@ class DataToolsMixin:
             from ledgerhound.config import get_int as _get_int
             cell_timeout = _get_int("kernel", "cell_timeout_seconds",
                                     env="LEDGERHOUND_CELL_TIMEOUT", default=1800)
-            self._kernel = KernelExecutor(
-                scratch_dir=self.run_dir / "scratch",
-                data_path=str(resolved), engine=engine,
-                timeout=max(30, cell_timeout),
-                features_dir=self._features_dir())
+            if self.isolation is not None:
+                cell_timeout = self.isolation.cell_timeout_s
+            from ledgerhound.runtime.isolation import IsolationError
+            try:
+                self._kernel = KernelExecutor(
+                    scratch_dir=self.run_dir / "scratch",
+                    data_path=str(resolved), engine=engine,
+                    timeout=max(30, cell_timeout),
+                    features_dir=self._features_dir(),
+                    isolation=self.isolation)
+            except IsolationError as e:
+                self._kernel_refusal = f"REFUSED: {e}"
+                self._log("isolation", level="refused", reason=str(e))
+                return f"({self._kernel_refusal})"
+            self._kernel_refusal = ""
             self._kernel_active = True
+            self.isolation_report = self._kernel.isolation_report
+            self._log("isolation", **self.isolation_report.as_dict())
             # Drain whatever the kernel downgraded during startup into the
             # canonical log. KernelExecutor has no EventStream of its own.
             for note in getattr(self._kernel, "gpu_fallbacks", []):
@@ -451,8 +463,10 @@ class DataToolsMixin:
             actual = getattr(self._kernel, "_engine", engine)
             gpu_note = (" -- data engine: cuDF (GPU)" if actual == "cudf"
                         else " -- data engine: pandas (CPU)")
-            return ("(real Python kernel started -- full language, "
-                    f"no restrictions{gpu_note}{helper_note})")
+            iso = self.isolation_report
+            iso_note = f" -- {iso.summary()}" if iso and iso.level != "off" else ""
+            return ("(real Python kernel started -- full language"
+                    f"{gpu_note}{helper_note}{iso_note})")
         except Exception as e:  # noqa: BLE001
             self._kernel = None
             self._kernel_active = False

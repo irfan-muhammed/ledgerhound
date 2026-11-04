@@ -47,8 +47,15 @@ class PythonToolsMixin:
             if refusal:
                 self._events.append("goal_gate", kind=gate.kind, code=code[:500])
                 return refusal
+        if self._kernel_refusal:
+            return self._kernel_refusal
         if self._kernel_active and self._kernel is not None:
             return self._run_python_kernel(code)
+        if self.isolation is not None and self.isolation.mode == "require":
+            return ("REFUSED: isolation is required (--require-isolation) but no "
+                    "isolated kernel is running, and code never runs in-process "
+                    "under that flag. Install the kernel dependencies "
+                    "(pip install 'ledgerhound[mcp]') and reload the data.")
         refusal = self._exec_blocklist.check(code)
         if refusal:
             return refusal

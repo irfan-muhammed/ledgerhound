@@ -27,6 +27,7 @@ container. MCP mode has no `exec` fallback: code runs only in the kernel.
 |---|---|---|
 | No network | `bwrap --unshare-net`; kernel talks to the server over Jupyter's `ipc` transport (Unix sockets on disk), since a new network namespace has its own loopback | Linux, WSL |
 | Writes confined | `bwrap` mounts `/` read-only; read-write only for the run folder and a private temp folder | Linux, WSL |
+| No host sockets | `bwrap` gives the kernel a private `/run`, `/tmp` and `/dev/shm`. Unix sockets ignore the network namespace, and the host's `/run` holds the user D-Bus (`systemd-run --user` would start a process outside the sandbox), the WSL interop socket (runs Windows `.exe` files with full network) and `docker.sock` | Linux, WSL |
 | Clean environment | Kernel starts with an allow-listed environment: no API keys, cloud credentials or tokens | All platforms |
 | Memory cap | cgroup `MemoryMax` via `systemd-run --user --scope` when a user systemd and the memory controller exist; otherwise the server polls the kernel's real resident memory and kills it past a threshold | cgroup: Linux/WSL with systemd; polling: everywhere |
 | Runaway cells | Per-cell wall-clock timeout, high and configurable (`kernel.cell_timeout_seconds`, default 30 min) | All platforms |

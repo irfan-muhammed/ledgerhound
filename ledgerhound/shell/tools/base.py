@@ -25,7 +25,8 @@ class AnalystToolsBase:
     def __init__(self, project=None, out_root: str | Path = "run_outputs",
                  renderer: Callable[[str], None] = print, registry=None,
                  gate=None, autonomous: bool = False, use_kernel: bool = False,
-                 methodology: str = "", methodology_mode: str = ""):
+                 methodology: str = "", methodology_mode: str = "",
+                 isolation=None):
         self.project = project
         self.render = renderer
         # The LLM driving this session, if any. The tool layer only reads
@@ -48,6 +49,14 @@ class AnalystToolsBase:
         self.use_kernel = use_kernel
         self._kernel = None
         self._kernel_active = False
+        # ADR 0001: how the kernel is sandboxed (an IsolationPolicy; None =
+        # off). `isolation_report` is what was actually enforced on the
+        # current kernel; `_kernel_refusal` is set when the policy required a
+        # level this machine cannot give, and run_python then refuses rather
+        # than falling back to the in-process exec sandbox.
+        self.isolation = isolation
+        self.isolation_report = None
+        self._kernel_refusal = ""
         self.run_dir = Path(out_root) / _ts()
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self._df: pd.DataFrame | None = None
