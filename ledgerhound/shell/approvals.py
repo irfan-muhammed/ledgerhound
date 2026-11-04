@@ -75,6 +75,9 @@ class RelayGate(HITLGate):
     # Set by the MCP layer for ONE tool call: the answer the agent relayed.
     agent_answer: Optional[str] = None
     last_approved_by: str = ""
+    # The question the last call stopped on, so an MCP layer that can ask the
+    # person out-of-band (2026-07-28 input_required) knows what to ask.
+    pending: Optional[tuple] = None
 
     def __post_init__(self):
         self.prompt = self._relay
@@ -98,11 +101,13 @@ class RelayGate(HITLGate):
             raw, self.agent_answer = self.agent_answer, None
             hit = match_option(raw, options)
             if hit is None:
+                self.pending = (question, list(options))
                 raise NeedsPersonDecision(
                     question, options,
                     reason=f'confirm="{raw}" matches none of the options.')
             self.last_approved_by = "agent"
             return hit
+        self.pending = (question, list(options))
         raise NeedsPersonDecision(question, options)
 
     def _record(self, d: HITLDecision) -> HITLDecision:

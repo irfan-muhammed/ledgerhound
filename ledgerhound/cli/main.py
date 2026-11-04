@@ -10,7 +10,13 @@ import sys
 from pathlib import Path
 from typing import Any, Optional
 
-import typer
+if sys.argv[1:2] == ["mcp"]:
+    # `ledgerhound mcp`: stdout is the MCP protocol channel from the first
+    # byte, so divert it before typer, rich or any command module loads.
+    from ledgerhound.mcp._stdio import protect_stdout
+    protect_stdout()
+
+import typer  # noqa: E402
 from rich.console import Console
 from rich.panel import Panel
 
@@ -58,6 +64,21 @@ def _startup() -> None:
     ./sentinel_workspace to their Ledgerhound names (see ledgerhound._compat)."""
     from ledgerhound._compat import migrate_cwd
     migrate_cwd()
+
+
+@app.command("mcp")
+def mcp_server(
+    out_root: str = typer.Option("run_outputs", "--out-root",
+                                 help="where run folders go"),
+    require_isolation: bool = typer.Option(
+        False, "--require-isolation",
+        help="refuse to run code unless the kernel is fully sandboxed"),
+) -> None:
+    """Serve Ledgerhound over MCP (stdio) for Claude Code, Codex, OpenCode
+    or any MCP client:  claude mcp add ledgerhound -- ledgerhound mcp"""
+    from ledgerhound.mcp.server import main as mcp_main
+    args = ["--out-root", out_root] + (["--require-isolation"] if require_isolation else [])
+    raise typer.Exit(mcp_main(args))
 
 
 def _read_user_turn(console: Console, prompt: str) -> str:

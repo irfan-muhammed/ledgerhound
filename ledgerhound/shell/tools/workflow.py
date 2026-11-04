@@ -173,7 +173,15 @@ class WorkflowToolsMixin:
             self._save_methodology()
             self._refresh_schema_pin()
             return f"[METHODOLOGY] {m.name}\n\n{m.pin_block()}"
-        except Exception:  # noqa: BLE001 -- never break a data load
+        except Exception as e:  # noqa: BLE001 -- never break a data load
+            from ledgerhound.shell.approvals import NeedsPersonDecision
+            if isinstance(e, NeedsPersonDecision):
+                self._events.append("methodology_set", template=None,
+                                    chosen_by="not_asked_relay")
+                return ("[METHODOLOGY] none adopted -- the user could not be "
+                        "asked from here. Ask the user which methodology they "
+                        "want (set_methodology with no template lists them) "
+                        "and call set_methodology.")
             return ""
 
     def _save_methodology(self) -> None:
