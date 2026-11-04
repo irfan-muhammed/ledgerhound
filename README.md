@@ -38,10 +38,10 @@ what is **actually built**, so the two are never confused.
 
 [![CI](https://github.com/irfan-muhammed/ledgerhound/actions/workflows/ci.yml/badge.svg)](https://github.com/irfan-muhammed/ledgerhound/actions/workflows/ci.yml)
 
-Version `0.7.9`. **133 tests** (`pytest`), run by CI on Python 3.10, 3.11
+Version `0.7.9`. **151 tests** (`pytest`), run by CI on Python 3.10, 3.11
 and 3.12. They cover the HITL gate, guardrail refusals, the restatement
 guard, tool-call parsing (native, text and SSE), the hash-chained event log,
-and a full scripted-LLM session. That is a safety net for the core loop, not
+the tool layer without an LLM, and a full scripted-LLM session. That is a safety net for the core loop, not
 coverage of every module: most of the ~80k lines still have no tests.
 (Earlier drafts of this README claimed ~2,700 tests; they were never
 committed.)
@@ -51,6 +51,10 @@ committed.)
 Everything below in this subsection is the CLI shell (`ConversationalAnalyst`,
 `ledgerhound/shell/conversation.py`) — the engine a user actually talks to. The
 v4 pipeline described next has **no production caller yet**; this does.
+
+It is three layers: `shell/loop.py` (the LLM turn loop), `shell/tools/` (session
+state and every tool, usable without an LLM) and `shell/guardrails/` (one class
+per guardrail, enforced inside the tools).
 
 - **GPU-first, not GPU-optional.** Kernel mode eagerly initialises RMM
   (managed memory, so it can oversubscribe past one card), installs
