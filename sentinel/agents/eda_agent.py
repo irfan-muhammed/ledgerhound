@@ -50,6 +50,7 @@ if TYPE_CHECKING:  # avoid circular import at runtime
     from sentinel.memory.knowledge import DatasetKnowledge
     from sentinel.memory.session_log import SessionLog
     from sentinel.compute.tier import TierClassifier
+    from sentinel.agents.spec import AgentSpec
 
 log = logging.getLogger(__name__)
 console = Console()

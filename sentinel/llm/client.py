@@ -618,6 +618,13 @@ class LLMClient:
         if "data:" in text:
             content_parts: list[str] = []
             last_obj: dict = {}
+            usage: dict = {}
+            finish_reason = ""
+            # Streamed native tool calls arrive as fragments keyed by
+            # `index`: the first carries id/name, later ones append to
+            # `arguments`. They used to be dropped here, so a gateway that
+            # streamed despite stream:false produced an apparently empty turn.
+            tool_calls: dict[int, dict] = {}
             for line in text.splitlines():
                 line = line.strip()
                 if not line.startswith("data:"):
@@ -630,14 +637,34 @@ class LLMClient:
                 except Exception:
                     continue
                 last_obj = obj
-                delta = (obj.get("choices", [{}])[0].get("delta")
-                         or obj.get("choices", [{}])[0].get("message") or {})
+                if obj.get("usage"):
+                    usage = obj["usage"]
+                choice = (obj.get("choices") or [{}])[0]
+                if choice.get("finish_reason"):
+                    finish_reason = choice["finish_reason"]
+                delta = choice.get("delta") or choice.get("message") or {}
                 if delta.get("content"):
                     content_parts.append(delta["content"])
+                for tc in delta.get("tool_calls") or []:
+                    idx = tc.get("index", len(tool_calls))
+                    slot = tool_calls.setdefault(idx, {
+                        "id": "", "type": "function",
+                        "function": {"name": "", "arguments": ""}})
+                    if tc.get("id"):
+                        slot["id"] = tc["id"]
+                    fn = tc.get("function") or {}
+                    if fn.get("name"):
+                        slot["function"]["name"] = fn["name"]
+                    if fn.get("arguments"):
+                        slot["function"]["arguments"] += fn["arguments"]
             if content_parts or last_obj:
-                return {"choices": [{"message": {
-                    "role": "assistant", "content": "".join(content_parts)}}],
-                    "usage": last_obj.get("usage", {})}
+                message: dict = {"role": "assistant", "content": "".join(content_parts)}
+                if tool_calls:
+                    message["tool_calls"] = [
+                        {**tc, "id": tc["id"] or f"call_{i}"}
+                        for i, tc in (sorted(tool_calls.items()))]
+                return {"choices": [{"message": message, "finish_reason": finish_reason}],
+                        "usage": usage}
         ctype = r.headers.get("content-type", "?")
         raise ValueError(
             f"Non-JSON response from LLM endpoint (content-type={ctype}). "

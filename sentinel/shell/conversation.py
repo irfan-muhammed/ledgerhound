@@ -554,6 +554,12 @@ def _failure_signature(result: str) -> str | None:
         return result.splitlines()[0][len("Error:"):].strip()
     if result.startswith("blocked:"):
         return result.splitlines()[0].strip()
+    # Guardrail refusals (goal gates, restatement guard, chapter dedupe,
+    # phase gate). Without this a refused cell counted as a success: it was
+    # tallied as evidence, offered an "undo" for a change that never ran,
+    # and never tripped the identical-failure note.
+    if result.startswith("REFUSED"):
+        return result.splitlines()[0].strip()[:160]
     # The tool registry's own failures ("error: bad arguments for X: ...",
     # "error running X: ...", "error: unknown tool X") and unreadable
     # arguments. They used to slip past this check (it only knew "Error:"),
