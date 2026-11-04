@@ -3870,65 +3870,6 @@ def monitor_history(
     console.print(t)
 
 
-# ============================================================
-# `sentinel demo` -- run the built-in integration demo
-# ============================================================
-
-@app.command()
-def demo(
-    workspace: str = typer.Option(
-        ".sentinel_demo_workspace", "--workspace", "-w",
-        help="Workspace dir for demo artefacts (created automatically)",
-    ),
-    n_fraud: int = typer.Option(500, "--n-fraud", help="Synthetic fraud rows"),
-    n_nonfr: int = typer.Option(2000, "--n-nonfr", help="Synthetic non-fraud rows"),
-    skip_playbook: bool = typer.Option(
-        False, "--skip-playbook",
-        help="Skip the full playbook run (faster smoke test)",
-    ),
-):
-    """Run the end-to-end demo on synthetic UPI data.
-
-    Exercises the complete pipeline:
-      1  Workspace init
-      2  Synthetic data generation
-      3  Cross-dataset consistency validation
-      4  Fraud typology clustering
-      5  Hard negative mining
-      6  PSI certification
-      7  Signal decay measurement (2 periods)
-      8  Typology evolution tracking
-      9  Full playbook run
-     10  Institutional memory inspection
-    """
-    import subprocess
-    import sys
-    scripts_dir = Path(__file__).parent.parent.parent / "scripts"
-    demo_script = scripts_dir / "run_demo.py"
-    if not demo_script.exists():
-        console.print(f"[red]Demo script not found: {demo_script}[/red]")
-        raise typer.Exit(1)
-
-    env_args = [
-        sys.executable, "-X", "utf8", str(demo_script),
-        "--workspace", workspace,
-        "--n-fraud", str(n_fraud),
-        "--n-nonfr", str(n_nonfr),
-    ]
-    if skip_playbook:
-        env_args.append("--skip-playbook")
-
-    console.print(Panel(
-        f"[bold]Sentinel Phase-2 Demo[/bold]\n"
-        f"  workspace: {workspace}\n"
-        f"  fraud rows: {n_fraud:,}  nonfr rows: {n_nonfr:,}\n"
-        f"  script: {demo_script}",
-        border_style="cyan",
-    ))
-    result = subprocess.run(env_args)
-    raise typer.Exit(result.returncode)
-
-
 # ============================================================================
 # M7 -- CLI surfaces for compute doctor + longitudinal memory
 # ============================================================================

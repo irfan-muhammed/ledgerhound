@@ -17,8 +17,8 @@ Claude-Code-style conversational analyst.
 The whole path on an internal Kubeflow pod, in order. Each step is explained in
 more detail further down; this is the checklist.
 
-**1. Get the code.** Clone (or copy) the `prod` branch -- it is the shell
-CLI only -- and open a terminal in it.
+**1. Get the code.** Clone the repository (`main` branch) and open a
+terminal in it.
 
 **2. Install.**
 
@@ -209,8 +209,7 @@ pip install -e ".[dev,test]"            # + dev: pytest, ruff, notebook-executio
 
 Core alone is enough to use the shell. On a pod, install
 `.[s3,tokenizers,test]` (section 0). Add `wheelhouse` for the
-modeling/feature-selection stack; without it the modelling tests are
-skipped with an install hint.
+modeling/feature-selection stack.
 
 **Step 4 — configure and check the environment.** Copy
 `main_config.example.yaml` to `main_config.yaml` and fill in the `llm:`
@@ -457,15 +456,6 @@ again after that. If the gateway later rejects a request as an auth failure
 error), clears the stored key, and prompts once more -- your next message
 just works with the new key, no restart needed.
 
-**Optional — the web dashboard.** A browser front-end with live plan, findings,
-charts, and the hash-chained audit stream:
-
-```bash
-python -m webui        # then open http://127.0.0.1:8000
-```
-
-(Windows: double-click `webui/run_demo.bat` after setting the API key.)
-
 ---
 
 ## 2. The core loop -- data science by conversation
@@ -708,8 +698,7 @@ scripted playbook stack, not the shell).
 
 ## 8. Setting the judge model
 
-Benchmarks and evals (`scripts/validate_e2e.py`, `scripts/eval_generic_fraud.py`)
-use a second model as a **reference-guided judge** to grade the analyst's
+Benchmarks and evals (`sentinel/eval/`) use a second model as a **reference-guided judge** to grade the analyst's
 claims. The `/adversarial` deep-research loop (section 8b) also uses it, both
 as the adversary's own model and for the final verdict. If you don't
 configure one, the actor grades *itself* — that still runs, but it's not
@@ -724,7 +713,7 @@ override directly without touching the rest of the judge config;
 All of these persist to `.sentinel/config.yaml` (Option B below), so they
 also apply outside the shell (benchmarks, `/adversarial`).
 
-**Option B — in the project config (persists, works from the web UI):**
+**Option B — in the project config (persists):**
 
 ```yaml
 # .sentinel/config.yaml
@@ -746,8 +735,8 @@ logs a warning and falls through — it does not half-configure a judge.
 
 Resolution order is: **env vars → `judge.config_ref` → self-judge**. The
 scripts consult `./.sentinel/config.yaml` automatically when run from the
-repo root, so setting the judge in the web UI and then running a benchmark
-just works. Check which one was used in the run's record:
+repo root, so setting the judge with `/model-judge` and then running a
+benchmark just works. Check which one was used in the run's record:
 
 ```json
 "judge": {"model": "kimi-k2.5", "endpoint": "...", "self_judge": false, "source": "project_config"}
@@ -870,7 +859,6 @@ power-user surface the shell composes for you. Run any command with
 | `sentinel doctor` | Environment check: version, identity, keys, object store connection, tokenizer. |
 | `python scripts/prod_checks.py [gateway store kb tokenizer gpu adversarial]` | Deployment check on a pod: PASS/WARN/FAIL per check, JSON result saved. |
 | `sentinel profile <data>` | Profile a dataset — no LLM needed. |
-| `sentinel demo` | End-to-end demo on synthetic UPI data (no key needed for the data side). |
 | `sentinel health` | Ping the configured LLM endpoint. |
 | `sentinel version` / `sentinel stats` / `sentinel whoami` | Install info, run/memory summary, current identity. |
 
@@ -1061,8 +1049,7 @@ auto-investigation sends the drifted data slice to whichever LLM
 `--llm-config` points at. If that data came from Trino (i.e. it's real,
 possibly regulated data) and your LLM config points at a public API
 instead of your organization's internal gateway, this crosses the zone
-boundary real transaction data is never supposed to cross (see
-`docs/v3.0/ZONING.md`). The CLI prints a warning every time this
+boundary real transaction data is never supposed to cross. The CLI prints a warning every time this
 combination is active — read it, and point `--llm-config` at your
 internal gateway (e.g. `configs/gateway.yaml`) for any Trino-sourced
 monitor with auto-investigation on.

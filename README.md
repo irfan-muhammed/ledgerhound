@@ -31,7 +31,10 @@ Sentinel exists to fix all of this — with numbers, not intuition.
 Most of this README describes the original design intent. This section says
 what is **actually built**, so the two are never confused.
 
-**Suite: ~2700 tests passing.** Version `0.7.9`. Deployed from the `prod` branch (shell CLI only); development on `main`.
+Version `0.7.9`. One branch, `main`. **There is no automated test suite in
+this repository yet** — earlier drafts of this README claimed one; it was
+never committed. A `tests/` suite and CI are being added now (Ledgerhound
+Phase 1), and this line will state the real count once they land.
 
 ### The live path: `sentinel shell` *(the actual product today)*
 
@@ -93,8 +96,8 @@ v4 pipeline described next has **no production caller yet**; this does.
 ### v4 — sample construction and certification *(new, `sentinel/pipeline/`)*
 
 The v4 work answers a specific question: *was this training sample built the
-way it claims to have been?* Twelve modules, ~350 tests. Full plan and
-per-module rationale in `docs/v4.0/next_steps_v4.md`.
+way it claims to have been?* Twelve modules; per-module rationale lives in
+each module's docstring.
 
 | Module | What it does |
 |---|---|
@@ -134,15 +137,15 @@ so the refusal is the contract.
 
 Stated plainly because a reader should not have to infer it:
 
-- **Nothing has run against real data.** Every module is tested on synthetic
-  fixtures.
-- **No Trino query has ever executed.** SQL generation is tested; execution
-  is not.
-- **Scale is untested** — largest test frame ~200k rows against an 8-crore
-  target.
+- **Nothing has run against real data.** Modules were exercised only on
+  synthetic fixtures during development, and those tests were never
+  committed to this repository.
+- **No Trino query has ever executed.** SQL is generated, never run.
+- **Scale is untested** — largest frame tried was ~200k rows against an
+  8-crore target.
 - **The gate has no production caller.** Nothing in `cli/` or `shell/`
   imports `sentinel.pipeline` yet. Intended for Kubeflow components, which
-  import libraries directly — see `docs/v4.0/KUBEFLOW_DEPLOYMENT.md`.
+  import libraries directly; no Kubeflow deployment has been validated.
 - **Label rules are undecided**, so the pipeline cannot run end to end until
   the fraud team confirms which typologies apply at which scope.
 - **cuDF/GPU: smoke-tested on real hardware, not this codebase's actual
@@ -156,9 +159,7 @@ Stated plainly because a reader should not have to infer it:
   acceleration is reachable without a flag. Still not done: this repo's own
   pipeline/aggregation code has never run on a GPU (only the CLI/shell
   backend routing was tested — a hand-built frame, not this project's data
-  or code path); nothing has run at 8-crore scale; the web UI still
-  hardcodes the pandas sandbox (kernel mode's subprocess isolation would
-  break its in-process chart capture — separate fix); and there is no
+  or code path); nothing has run at 8-crore scale; and there is no
   multi-GPU sharding (dask-cudf) — a single card tops out well under the
   8-crore target, so full-population EDA stays chunked/pushed to Trino.
 
@@ -396,13 +397,12 @@ sentinel/
 ├── scorecard/ project/ workspace/ session/  # scorecards; project + artifacts
 │
 │  ── INTERFACES ────────────────────────────────────────────────────────
-├── cli/                # `sentinel` CLI (~30 commands)
+├── cli/                # `sentinel` CLI (~100 commands)
 ├── llm/                # LLM client (vLLM / OpenAI-compatible); model discovery/selection, ask-once API keys
 └── integrations/       # Jira, git, MinIO
 ```
 
-This branch ships the CLI only. The optional `webui/` front-end is not
-deployed and is not present here; it remains on `main`.
+This repository ships the CLI only. There is no web front-end in it.
 
 ### Workspace on Disk
 
@@ -543,7 +543,7 @@ object store, tokenizer, GPU and one `/adversarial` case end to end.
 ## Install
 
 ```bash
-cd sentinel-ai
+git clone https://github.com/irfan-muhammed/ledgerhound && cd ledgerhound
 pip install -e .                 # core (incl. the v4 pipeline package)
 pip install -e ".[s3]"           # + boto3: /s3 data from the object store
 pip install -e ".[tokenizers]"   # + exact token counting
@@ -551,7 +551,7 @@ pip install -e ".[test]"         # + the persistent analysis kernel (jupyter_cli
 pip install -e ".[wheelhouse]"   # + modelling: xgboost, lightgbm, optuna, feature selection
 pip install -e ".[sql]"          # + sqlalchemy
 pip install --extra-index-url=https://pypi.nvidia.com ".[gpu]"       # + cuDF (CUDA 13 only -- the only toolkit this project supports)
-pip install -e ".[dev,test,wheelhouse]"   # + pytest, ruff -- everything the full test suite needs
+pip install -e ".[dev,test,wheelhouse]"   # + pytest, ruff
 ```
 
 Two notes worth having before an image build:
@@ -560,13 +560,8 @@ Two notes worth having before an image build:
   that extra. It is a **warning, not an error** — `rich` is declared
   separately and the extra only added shell-completion helpers — but it will
   appear in every build log.
-- The `test` extra matters in CI: without it, the notebook-execute and
-  kernel-mode tests **silently skip** rather than fail, so a runner without
-  it never exercises those paths.
-
-For Kubeflow specifically, see `docs/v4.0/KUBEFLOW_DEPLOYMENT.md` — it
-covers component boundaries and, more usefully, what has *not* been
-validated.
+- The `test` extra installs the persistent analysis kernel
+  (`jupyter_client`, `ipykernel`); without it, kernel mode is unavailable.
 
 ### Configuration — `main_config.yaml`, not environment variables
 
@@ -584,9 +579,8 @@ gateway, one shape for any model behind it; the judge is independent and
 can run a different method/model, or be left blank to self-judge), real
 institutional knowledge kept **outside** this repo
 (`knowledge.profiles_dir` / `knowledge.knowledge_dir`), GPU tuning, Trino,
-the web UI, identity, and integrations. Nothing to `export` before every
-session — `sentinel shell` reads the file directly, and nothing in it is
-required just to run the test suite.
+identity, and integrations. Nothing to `export` before every
+session — `sentinel shell` reads the file directly.
 
 Every setting still has an environment-variable fallback (named in
 `main_config.example.yaml`) for production paths that inject env vars
