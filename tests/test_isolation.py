@@ -242,3 +242,19 @@ def test_full_sandboxed_session_sees_its_data(tmp_path, fraud_csv):
         assert "550.0" in out, out
     finally:
         s.close()
+
+
+def test_interpreter_under_hidden_tmp_is_reexposed(monkeypatch, tmp_path):
+    # A venv in /tmp is hidden by the sandbox's private /tmp; the kernel's
+    # own interpreter would vanish and it would die at start.
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    monkeypatch.setattr(iso.sys, "prefix", str(venv))
+    monkeypatch.setattr(iso.sys, "executable", str(venv / "bin" / "python"))
+    paths = [str(p) for p in iso.interpreter_paths()]
+    if str(tmp_path.resolve()).startswith("/tmp"):
+        assert str(venv.resolve()) in paths
+    args = iso.bwrap_args([], iso.interpreter_paths())
+    for p in paths:
+        assert args[args.index(p) - 1] == "--ro-bind"
+    assert all(p.startswith(("/tmp", "/run", "/dev/shm")) for p in paths)

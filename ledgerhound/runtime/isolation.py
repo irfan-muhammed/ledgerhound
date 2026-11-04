@@ -141,7 +141,7 @@ class IsolationPolicy:
         transport = "tcp"
         network, writes = "open", "unrestricted"
         if sys.platform.startswith("linux") and bwrap_works():
-            prefix += bwrap_args(writable, readable or [])
+            prefix += bwrap_args(writable, list(readable or []) + interpreter_paths())
             transport, network, writes = "ipc", "blocked", "confined"
         elif sys.platform.startswith("linux"):
             missing.append("bwrap unavailable or blocked (install bubblewrap; "
@@ -200,6 +200,31 @@ def kernel_env(home: Path, extra: dict[str, str] | None = None) -> dict[str, str
     if extra:
         env.update(extra)
     return env
+
+
+_HIDDEN_ROOTS = ("/tmp", "/run", "/dev/shm")
+
+
+def interpreter_paths() -> list[Path]:
+    """The interpreter, its prefixes and its import path, where they sit under
+    a root the sandbox hides. A venv in /tmp (CI scratch venvs, some pipx/uv
+    setups) would otherwise vanish inside the sandbox and the kernel dies at
+    start."""
+    cands = [Path(sys.executable).parent, Path(sys.prefix), Path(sys.base_prefix),
+             Path(sys.exec_prefix)] + [Path(p) for p in sys.path if p]
+    out, seen = [], set()
+    for p in cands:
+        try:
+            rp = p.resolve()
+        except OSError:
+            continue
+        s = str(rp)
+        if s in seen or not rp.exists():
+            continue
+        if any(s == r or s.startswith(r + "/") for r in _HIDDEN_ROOTS):
+            seen.add(s)
+            out.append(rp)
+    return out
 
 
 def bwrap_args(writable: list[Path], readable: list[Path] = ()) -> list[str]:
