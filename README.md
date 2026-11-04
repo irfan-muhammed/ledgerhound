@@ -31,10 +31,15 @@ Sentinel exists to fix all of this — with numbers, not intuition.
 Most of this README describes the original design intent. This section says
 what is **actually built**, so the two are never confused.
 
-Version `0.7.9`. One branch, `main`. **There is no automated test suite in
-this repository yet** — earlier drafts of this README claimed one; it was
-never committed. A `tests/` suite and CI are being added now (Ledgerhound
-Phase 1), and this line will state the real count once they land.
+[![CI](https://github.com/irfan-muhammed/ledgerhound/actions/workflows/ci.yml/badge.svg)](https://github.com/irfan-muhammed/ledgerhound/actions/workflows/ci.yml)
+
+Version `0.7.9`. **133 tests** (`pytest`), run by CI on Python 3.10, 3.11
+and 3.12. They cover the HITL gate, guardrail refusals, the restatement
+guard, tool-call parsing (native, text and SSE), the hash-chained event log,
+and a full scripted-LLM session. That is a safety net for the core loop, not
+coverage of every module: most of the ~80k lines still have no tests.
+(Earlier drafts of this README claimed ~2,700 tests; they were never
+committed.)
 
 ### The live path: `sentinel shell` *(the actual product today)*
 
