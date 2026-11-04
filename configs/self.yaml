@@ -1,14 +1,14 @@
-# Sentinel -- self-hosted LLM (vLLM-style, no API key needed)
+# Ledgerhound -- self-hosted LLM (vLLM-style, no API key needed)
 #
-# base_url/model come from SENTINEL_LLM_SELF_BASE_URL / _MODEL
+# base_url/model come from LEDGERHOUND_LLM_SELF_BASE_URL / _MODEL
 # (or _MODEL_FALLBACK if _MODEL is unset) -- see env.txt.
 # No api_key_env: self-hosted endpoints here don't need a bearer token.
 #
 # Usage:
-#   export SENTINEL_LLM_METHOD=self
-#   export SENTINEL_LLM_SELF_BASE_URL="http://localhost:8000/v1"
-#   export SENTINEL_LLM_SELF_MODEL="whatever-you-deployed"
-#   sentinel shell   (or: /model configs/self.yaml)
+#   export LEDGERHOUND_LLM_METHOD=self
+#   export LEDGERHOUND_LLM_SELF_BASE_URL="http://localhost:8000/v1"
+#   export LEDGERHOUND_LLM_SELF_MODEL="whatever-you-deployed"
+#   ledgerhound shell   (or: /model configs/self.yaml)
 
 llm:
   method: self

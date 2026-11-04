@@ -1,17 +1,17 @@
-# Sentinel -- external hosted API (DeepSeek, GLM, any OpenAI-compatible
+# Ledgerhound -- external hosted API (DeepSeek, GLM, any OpenAI-compatible
 # provider)
 #
 # One config for any external provider -- base_url/model/key come from
-# SENTINEL_LLM_API_BASE_URL / _MODEL / _API_KEY (or _MODEL_FALLBACK if
+# LEDGERHOUND_LLM_API_BASE_URL / _MODEL / _API_KEY (or _MODEL_FALLBACK if
 # _MODEL is unset) -- see env.txt. Switching providers (DeepSeek -> GLM)
 # is just changing those three env vars, not this file.
 #
 # Usage:
-#   export SENTINEL_LLM_METHOD=api
-#   export SENTINEL_LLM_API_BASE_URL="https://api.deepseek.com/v1"
-#   export SENTINEL_LLM_API_MODEL="deepseek-v4-flash"
-#   export SENTINEL_LLM_API_API_KEY="sk-..."
-#   sentinel shell   (or: /model configs/api.yaml)
+#   export LEDGERHOUND_LLM_METHOD=api
+#   export LEDGERHOUND_LLM_API_BASE_URL="https://api.deepseek.com/v1"
+#   export LEDGERHOUND_LLM_API_MODEL="deepseek-v4-flash"
+#   export LEDGERHOUND_LLM_API_API_KEY="sk-..."
+#   ledgerhound shell   (or: /model configs/api.yaml)
 
 llm:
   method: api

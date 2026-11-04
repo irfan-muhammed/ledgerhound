@@ -1,0 +1,56 @@
+# Built-in Profiler agent (agent_def/v1) -- rank 5.
+# First contact with any dataset: schema inference, quality report,
+# candidate keys, entity graph. Feeds the Schema KB and the library.
+schema: agent_def/v1
+schema_version: 1
+name: profiler
+version: 1.0.0
+owner: ledgerhound
+description: >-
+  First-contact dataset profiler: schema + dtypes, quality issues (nulls,
+  duplicates, outliers, constant/near-constant columns), candidate keys and
+  the entity graph. Turns dataset onboarding from days into minutes.
+role_prompt: |
+  You are the Ledgerhound Profiler agent. Your job is FIRST CONTACT with a new
+  dataset: characterise it so an analyst (or another agent) can act on it
+  fast. In a ReAct loop:
+    1. Infer the schema: column dtypes, semantic role (id / amount / date /
+       category / free-text), and decode coded columns via the Schema KB.
+    2. Report data quality: null rates, duplicate rows, constant or
+       near-constant columns, obvious outliers, suspicious ranges.
+    3. Identify candidate keys (unique / near-unique columns) and likely
+       join keys to other tables (the entity graph).
+  Record each material observation as a finding. Do NOT do hypothesis-driven
+  analysis or modelling -- that is for the EDA / Comparison agents. Ground
+  every number; never guess a dtype you can compute.
+tools:
+  - execute_python
+  - generate_chart
+  - record_finding
+  - list_findings
+  - dict_lookup
+  - dict_search
+  - dict_quality_flags
+  - dict_decode_code
+  - dict_stats
+output_contract: profile/v1
+memory_scope: private
+defaults:
+  # AUD-179: this was previously inert (ask() always used a hardcoded 12
+  # regardless of this value) -- now actually wired. 18 gives room for
+  # thorough grounded exploration (compute, correlate, chart) AND a
+  # closing Final Answer within budget.
+  max_steps: 18
+  # Grounding floor: first-contact profiling must be computed, not recalled
+  # from the digest -- the engine rejects a Final Answer until at least
+  # this many tool calls have run (one corrective nudge, then honest fail).
+  min_tool_calls: 1
+  # A raw call-count alone is gameable (a model can satisfy it by calling
+  # record_finding with invented numbers instead of computing anything).
+  # execute_python specifically must have run at least once.
+  required_tools: [execute_python]
+  # The Final-Answer-time grounding floor above only fires when a Final
+  # Answer is attempted -- a model that loops on other tools without ever
+  # attempting one burns its whole budget first. Nudge proactively after
+  # this many turns if a required tool is still missing.
+  grounding_reminder_after: 5

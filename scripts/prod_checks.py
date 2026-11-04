@@ -11,7 +11,7 @@ and everything is saved to prod_checks_<time>.json so the result can be
 sent back as one file. Exit code 1 if anything FAILED.
 
 It reads the same main_config.yaml the shell uses (run it from where you
-run `sentinel shell`, or set SENTINEL_MAIN_CONFIG). It never prints a key.
+run `ledgerhound shell`, or set LEDGERHOUND_MAIN_CONFIG). It never prints a key.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ def report(check: str, status: str, detail: str) -> None:
 
 def _llm():
     """The shell's own LLM client, from main_config.yaml."""
-    from sentinel.llm.client import LLMClient, _load_master_config, normalise_method
+    from ledgerhound.llm.client import LLMClient, _load_master_config, normalise_method
     method = normalise_method(str((_load_master_config().get("llm") or {})
                                   .get("method") or "api"))
     cfg = Path(f"configs/{method}.yaml")
@@ -56,7 +56,7 @@ def check_gateway() -> None:
     listing = llm.list_models_detailed()
     if listing:
         ids = [m.get("id") for m in listing]
-        from sentinel.llm.catalog import context_window_from_listing
+        from ledgerhound.llm.catalog import context_window_from_listing
         cw = context_window_from_listing(llm.config.model, listing)
         report("gateway: /models", "PASS",
                f"{len(ids)} model(s): {', '.join(map(str, ids[:6]))}"
@@ -85,7 +85,7 @@ def check_gateway() -> None:
                "the gateway does not report usage -- token counts stay "
                "estimates unless a tokenizer is available")
     except Exception as e:  # noqa: BLE001
-        from sentinel.llm.client import LLMAuthError
+        from ledgerhound.llm.client import LLMAuthError
         kind = "API key rejected" if isinstance(e, LLMAuthError) else type(e).__name__
         report("gateway: chat", "FAIL", f"{kind}: {str(e)[:200]}")
         return
@@ -111,8 +111,8 @@ def check_gateway() -> None:
 # -- object store ------------------------------------------------------------
 
 def check_store() -> None:
-    from sentinel.io.minio import shared_settings
-    from sentinel.shell.minio_cmd import check_store as _check
+    from ledgerhound.io.minio import shared_settings
+    from ledgerhound.shell.minio_cmd import check_store as _check
     s = shared_settings()
     ok, code, message, fix = _check(s)
     report("object store", "PASS" if ok else "FAIL",
@@ -126,9 +126,9 @@ def check_kb() -> None:
     will simply keep old revisions)."""
     import json as _json
     import tempfile as _tf
-    from sentinel.io.minio import shared_settings
-    from sentinel.knowledge.dataset_card import DatasetCard
-    from sentinel.knowledge.team_kb import TeamKB
+    from ledgerhound.io.minio import shared_settings
+    from ledgerhound.knowledge.dataset_card import DatasetCard
+    from ledgerhound.knowledge.team_kb import TeamKB
     s = shared_settings()
     kb = TeamKB(settings=s, prefix="kb/_probe", outbox=Path(_tf.mkdtemp()) / "outbox",
                 background=False)
@@ -165,7 +165,7 @@ def check_kb() -> None:
 # -- tokenizer ---------------------------------------------------------------
 
 def _configured_model() -> str:
-    from sentinel.llm.client import _load_master_config, normalise_method
+    from ledgerhound.llm.client import _load_master_config, normalise_method
     sect = _load_master_config().get("llm") or {}
     method = normalise_method(str(sect.get("method") or "api"))
     return str(((sect.get(method) or {}).get("model")) or "")
@@ -177,7 +177,7 @@ def check_tokenizer() -> None:
     if not model:
         report("tokenizer: load", "SKIP", "no llm.<method>.model in main_config.yaml")
         return
-    from sentinel.llm.tokenizer import resolve_tokenizer
+    from ledgerhound.llm.tokenizer import resolve_tokenizer
     counter, st = resolve_tokenizer(model)
     if not st.ok:
         report("tokenizer: load", "FAIL", f"[{st.code}] {st.message} Fix: {st.fix}")
@@ -208,7 +208,7 @@ def check_tokenizer() -> None:
 # -- GPU kernel paths ----------------------------------------------------------
 
 def check_gpu() -> None:
-    from sentinel.backends.compute_router import ComputeRouter
+    from ledgerhound.backends.compute_router import ComputeRouter
     prof = ComputeRouter().detect()
     if prof.gpu_count == 0:
         report("gpu: detect", "SKIP", "no GPU on this machine")
@@ -216,7 +216,7 @@ def check_gpu() -> None:
     report("gpu: detect", "PASS",
            f"{prof.gpu_count} GPU(s) via {prof.gpu_detected_via}: {', '.join(prof.gpu_names)}")
     try:
-        from sentinel.auto.kernel import KernelExecutor, kernels_available
+        from ledgerhound.auto.kernel import KernelExecutor, kernels_available
     except Exception as e:  # noqa: BLE001
         report("gpu: kernel", "FAIL", f"cannot import the kernel: {e}")
         return
@@ -261,9 +261,9 @@ def check_gpu() -> None:
 def check_adversarial() -> None:
     import numpy as np
     import pandas as pd
-    from sentinel.adversarial import engine as E
-    from sentinel.adversarial.run import run_from_session
-    from sentinel.shell.conversation import ConversationalAnalyst
+    from ledgerhound.adversarial import engine as E
+    from ledgerhound.adversarial.run import run_from_session
+    from ledgerhound.shell.conversation import ConversationalAnalyst
     try:
         llm = _llm()
     except Exception as e:  # noqa: BLE001
@@ -312,7 +312,7 @@ def main(argv: list[str]) -> int:
     if unknown:
         print(f"unknown check(s): {', '.join(unknown)}. Choose from: {', '.join(CHECKS)}")
         return 2
-    from sentinel.config import resolved_path
+    from ledgerhound.config import resolved_path
     print(f"main_config.yaml: {resolved_path() or '(none found)'}\n")
     for name in wanted:
         try:

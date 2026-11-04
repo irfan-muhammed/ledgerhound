@@ -1,4 +1,4 @@
-# Sentinel -- master config template.
+# Ledgerhound -- master config template.
 #
 # Copy this to main_config.yaml (gitignored -- never pushed) and fill in
 # what you need. No environment variables to export, nothing to set
@@ -44,7 +44,7 @@ llm:
     model_fallback: ""
     api_key: ""
 
-  # models_url: for MODEL SELECTION (`sentinel shell`'s auto-discovery/
+  # models_url: for MODEL SELECTION (`ledgerhound shell`'s auto-discovery/
   # `/model` picker) only -- chat completions always use base_url above,
   # unaffected. Blank (the normal case) -> discovery just hits
   # "<base_url>/models". Set this ONLY if your gateway serves the model
@@ -83,7 +83,7 @@ judge:
 # every OUTPUT location is decided here, once, up front.
 # ============================================================
 paths:
-  # By default EVERYTHING Sentinel writes lands in one folder per user,
+  # By default EVERYTHING Ledgerhound writes lands in one folder per user,
   # one level above the folder you launch from:
   #
   #   ../Agentic_eda_results/<username>/
@@ -114,24 +114,24 @@ paths:
 # package never carries real customer/production data or proprietary
 # business rules (it ships in a public repo).
 # knowledge:
-#   profiles_dir: ""      # env fallback: SENTINEL_PROFILES_DIR
-#   knowledge_dir: ""     # env fallback: SENTINEL_KNOWLEDGE_DIR
+#   profiles_dir: ""      # env fallback: LEDGERHOUND_PROFILES_DIR
+#   knowledge_dir: ""     # env fallback: LEDGERHOUND_KNOWLEDGE_DIR
 
 # GPU / compute -- all have working defaults already.
 # gpu:
-#   enable_dask_cudf: true       # env fallback: SENTINEL_ENABLE_DASK_CUDF
-#   force_gpu_frames: true       # env fallback: SENTINEL_FORCE_GPU_FRAMES
-#   force_gpu_min_rows: 1000000  # env fallback: SENTINEL_FORCE_GPU_MIN_ROWS
-#   cudf_pandas: true            # env fallback: SENTINEL_CUDF_PANDAS
+#   enable_dask_cudf: true       # env fallback: LEDGERHOUND_ENABLE_DASK_CUDF
+#   force_gpu_frames: true       # env fallback: LEDGERHOUND_FORCE_GPU_FRAMES
+#   force_gpu_min_rows: 1000000  # env fallback: LEDGERHOUND_FORCE_GPU_MIN_ROWS
+#   cudf_pandas: true            # env fallback: LEDGERHOUND_CUDF_PANDAS
 
-# Kernel mode (the persistent IPython kernel `sentinel shell` runs cells in).
+# Kernel mode (the persistent IPython kernel `ledgerhound shell` runs cells in).
 # kernel:
 #   cell_timeout_seconds: 1800   # one run_python cell may run this long
 #                                # before it is interrupted. A runaway-cell
 #                                # safety net, not a pace-setter: a single
 #                                # groupby on crore-scale data on the CPU
 #                                # fallback can legitimately take minutes.
-#                                # env fallback: SENTINEL_CELL_TIMEOUT
+#                                # env fallback: LEDGERHOUND_CELL_TIMEOUT
 
 # The team object store (S3-compatible Ceph at a payments organization): tokenizers, /s3 data,
 # uploaded feature tables and the shared team knowledge base. It needs BOTH
@@ -165,53 +165,53 @@ minio:
 #   prefix: "tokenizers"
 #   local_dir: ""                # a mounted folder (e.g. the PVC) with
 #                                # manifest.json; wins over the store
-#   cache_dir: ""                # default ~/.sentinel/tokenizers
+#   cache_dir: ""                # default ~/.ledgerhound/tokenizers
 
-# Session-quality observability -- for running Sentinel as a shared service
+# Session-quality observability -- for running Ledgerhound as a shared service
 # for other people. events.jsonl (full-fidelity, per-run, unbounded) is
 # unaffected by any of this. This is a SEPARATE, size-capped, ONE-file-for-
 # the-whole-deployment log: a compact scorecard line (tool-call/error/
 # refusal/HITL counts, not bodies) appended after every turn, from every
-# user, every project. Default path: ~/.sentinel/sessions.jsonl.
+# user, every project. Default path: ~/.ledgerhound/sessions.jsonl.
 # observability:
-#   sessions_log: ""               # blank = ~/.sentinel/sessions.jsonl.
-#                                   # env fallback: SENTINEL_SESSIONS_LOG.
+#   sessions_log: ""               # blank = ~/.ledgerhound/sessions.jsonl.
+#                                   # env fallback: LEDGERHOUND_SESSIONS_LOG.
 #                                   # Point this at shared/mounted storage
 #                                   # so every pod/user writes to one file.
 
 # Identity / attribution.
 # identity:
 #   user: ""    # your name/id -- attributes runs, decisions, findings to
-#               # you. env fallback: SENTINEL_USER (Kubeflow's PodDefault
+#               # you. env fallback: LEDGERHOUND_USER (Kubeflow's PodDefault
 #               # -- the production path, unaffected by leaving this unset)
 
 # Integrations (only if you use them). git/jira tokens are project-scoped,
-# not global -- see sentinel/project/settings.py's token_env mechanism
-# (.sentinel/config.yaml), not this file.
+# not global -- see ledgerhound/project/settings.py's token_env mechanism
+# (.ledgerhound/config.yaml), not this file.
 # integrations:
-#   index_url: ""       # custom pip wheel index. env fallback: SENTINEL_INDEX_URL
-#   minio_config: ""    # path to a MinIO config file. env fallback: SENTINEL_MINIO_CONFIG
+#   index_url: ""       # custom pip wheel index. env fallback: LEDGERHOUND_INDEX_URL
+#   minio_config: ""    # path to a MinIO config file. env fallback: LEDGERHOUND_MINIO_CONFIG
 
 # Trino (only if querying via Trino instead of local files).
 # trino:
-#   host: ""              # env fallback: SENTINEL_TRINO_HOST
-#   port: 8080             # env fallback: SENTINEL_TRINO_PORT
-#   user: ""              # env fallback: SENTINEL_TRINO_USER
-#   password: ""           # env fallback: SENTINEL_TRINO_PASSWORD
-#   catalog: ""            # env fallback: SENTINEL_TRINO_CATALOG
-#   schema: ""             # env fallback: SENTINEL_TRINO_SCHEMA
-#   http_scheme: "https"   # env fallback: SENTINEL_TRINO_HTTP_SCHEME
-#   use: true              # env fallback: SENTINEL_TRINO_USE
+#   host: ""              # env fallback: LEDGERHOUND_TRINO_HOST
+#   port: 8080             # env fallback: LEDGERHOUND_TRINO_PORT
+#   user: ""              # env fallback: LEDGERHOUND_TRINO_USER
+#   password: ""           # env fallback: LEDGERHOUND_TRINO_PASSWORD
+#   catalog: ""            # env fallback: LEDGERHOUND_TRINO_CATALOG
+#   schema: ""             # env fallback: LEDGERHOUND_TRINO_SCHEMA
+#   http_scheme: "https"   # env fallback: LEDGERHOUND_TRINO_HTTP_SCHEME
+#   use: true              # env fallback: LEDGERHOUND_TRINO_USE
 
-# Web UI (only if you run `sentinel webui`, not the CLI shell).
+# Web UI (only if you run `ledgerhound webui`, not the CLI shell).
 # webui:
-#   host: "127.0.0.1"      # env fallback: SENTINEL_WEBUI_HOST
-#   port: 8000              # env fallback: SENTINEL_WEBUI_PORT
-#   config: ""              # env fallback: SENTINEL_WEBUI_CONFIG
-#   project: ""              # env fallback: SENTINEL_WEBUI_PROJECT
-#   project_roots: ""        # os.pathsep-separated. env fallback: SENTINEL_WEBUI_PROJECT_ROOTS
-#   autonomous: true         # env fallback: SENTINEL_WEBUI_AUTONOMOUS
+#   host: "127.0.0.1"      # env fallback: LEDGERHOUND_WEBUI_HOST
+#   port: 8000              # env fallback: LEDGERHOUND_WEBUI_PORT
+#   config: ""              # env fallback: LEDGERHOUND_WEBUI_CONFIG
+#   project: ""              # env fallback: LEDGERHOUND_WEBUI_PROJECT
+#   project_roots: ""        # os.pathsep-separated. env fallback: LEDGERHOUND_WEBUI_PROJECT_ROOTS
+#   autonomous: true         # env fallback: LEDGERHOUND_WEBUI_AUTONOMOUS
 
 # Advisory / rarely needed.
 # tool_mode: auto   # native | prompt | auto -- how tool-calling is driven
-#                   # to the LLM. env fallback: SENTINEL_TOOL_MODE
+#                   # to the LLM. env fallback: LEDGERHOUND_TOOL_MODE

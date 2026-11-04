@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════
-# Sentinel — Local HuggingFace Model Config
+# Ledgerhound — Local HuggingFace Model Config
 # ════════════════════════════════════════════════════════════════
 # Uses DeepSeek-R1-Distill-Qwen-32B with 4-bit quantization.
 # No API server needed — loads directly onto GPU.
@@ -8,7 +8,7 @@
 #   pip install torch transformers bitsandbytes accelerate
 #
 # Usage:
-#   sentinel eda --digest digest.yaml --llm-config configs/llm_local.yaml --ask "..."
+#   ledgerhound eda --digest digest.yaml --llm-config configs/llm_local.yaml --ask "..."
 # ════════════════════════════════════════════════════════════════
 
 llm:

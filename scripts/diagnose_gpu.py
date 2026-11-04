@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Why is Sentinel running on CPU?  Run this ON THE GPU BOX.
+"""Why is Ledgerhound running on CPU?  Run this ON THE GPU BOX.
 
     python scripts/diagnose_gpu.py /path/to/your/data.parquet
 
@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sentinel.backends.compute_router import (  # noqa: E402
+from ledgerhound.backends.compute_router import (  # noqa: E402
     ComputeRouter,
     _dask_cudf_available,
 )
@@ -27,32 +27,32 @@ _HAS_V3_044 = False
 
 
 def _check_build() -> None:
-    """Is this copy of Sentinel new enough for the GPU flags to do anything?
+    """Is this copy of Ledgerhound new enough for the GPU flags to do anything?
 
     Before V3-044 the shell collapsed the router's ``dask_cudf`` decision to
-    ``"pandas"``, so SENTINEL_ENABLE_DASK_CUDF was inert no matter how it was
+    ``"pandas"``, so LEDGERHOUND_ENABLE_DASK_CUDF was inert no matter how it was
     set. Diagnosing a GPU problem against a build that predates the fix
     wastes a whole cycle, so establish which code is running before anything
     else.
     """
     import inspect
 
-    import sentinel
-    from sentinel.shell.conversation import ConversationalAnalyst
+    import ledgerhound
+    from ledgerhound.shell.conversation import ConversationalAnalyst
 
     print(BAR)
     print("0. BUILD AND EXECUTION BACKEND")
     print(BAR)
-    print(f"  package    {Path(sentinel.__file__).parent}")
-    print(f"  version    {getattr(sentinel, '__version__', 'unknown')}")
+    print(f"  package    {Path(ledgerhound.__file__).parent}")
+    print(f"  version    {getattr(ledgerhound, '__version__', 'unknown')}")
 
-    # The exec sandbox (sentinel/auto/sandbox.py) is pandas-only -- it has
+    # The exec sandbox (ledgerhound/auto/sandbox.py) is pandas-only -- it has
     # no cuDF branch whatsoever. If kernel mode is off, NOTHING below
     # matters: no GPU code path exists to reach. jupyter_client/ipykernel
     # live in the [test] extra, not the base install, so a perfectly good
     # RAPIDS box can land here purely for want of two pure-Python packages.
     try:
-        from sentinel.auto.kernel import kernels_available
+        from ledgerhound.auto.kernel import kernels_available
         ok = kernels_available()
     except Exception as e:  # noqa: BLE001
         ok = False
@@ -67,11 +67,11 @@ def _check_build() -> None:
         print("      (or: pip install -e '.[test]')")
     else:
         try:
-            from sentinel.cli.main import _auto_detect_use_kernel
+            from ledgerhound.cli.main import _auto_detect_use_kernel
             on, why = _auto_detect_use_kernel()
             print(f"  auto-detect  kernel mode {'ON' if on else 'OFF'} -- {why}")
             if not on:
-                print("               override with: sentinel shell --use-kernel")
+                print("               override with: ledgerhound shell --use-kernel")
         except Exception as e:  # noqa: BLE001
             print(f"  auto-detect  could not evaluate ({type(e).__name__}: {e})")
 
@@ -89,7 +89,7 @@ def _check_build() -> None:
     if not has_fix:
         print()
         print("  >>> STOP. This build still rewrites the router's dask_cudf")
-        print("      decision to 'pandas'. SENTINEL_ENABLE_DASK_CUDF cannot")
+        print("      decision to 'pandas'. LEDGERHOUND_ENABLE_DASK_CUDF cannot")
         print("      do anything here -- the flag is read, then the decision")
         print("      it enables is discarded one layer up. Update this")
         print("      checkout before diagnosing anything below.")
@@ -183,9 +183,9 @@ def main() -> int:
         print("    pip install --extra-index-url=https://pypi.nvidia.com \\")
         print(f"        \".[gpu-cu{cuda_major},multigpu-cu{cuda_major}]\"")
 
-    flag = os.environ.get("SENTINEL_ENABLE_DASK_CUDF")
+    flag = os.environ.get("LEDGERHOUND_ENABLE_DASK_CUDF")
     shown = repr(flag) if flag is not None else "unset (defaults to ON)"
-    print(f"\n  SENTINEL_ENABLE_DASK_CUDF = {shown}"
+    print(f"\n  LEDGERHOUND_ENABLE_DASK_CUDF = {shown}"
           f"  -> multi-GPU {'ENABLED' if _dask_cudf_available() else 'OFF'}")
     if not _dask_cudf_available() and (flag or "1").lower() not in (
             "0", "false", "no", "off"):

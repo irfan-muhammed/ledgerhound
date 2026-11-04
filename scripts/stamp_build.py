@@ -1,11 +1,11 @@
-"""Write sentinel/_build.py with the current git commit + UTC build time.
+"""Write ledgerhound/_build.py with the current git commit + UTC build time.
 
 Run right before zipping/packaging so the deployed build is identifiable:
 
     python scripts/stamp_build.py
     # then build the zip
 
-`sentinel version` then shows the commit, so "I unzipped a new build but
+`ledgerhound version` then shows the commit, so "I unzipped a new build but
 the new command is still missing" is immediately diagnosable (the stamp
 will read the OLD commit if the install is pointing at stale code).
 """
@@ -17,7 +17,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-OUT = Path(__file__).resolve().parent.parent / "sentinel" / "_build.py"
+OUT = Path(__file__).resolve().parent.parent / "ledgerhound" / "_build.py"
 
 
 def _git(*args: str) -> str:
@@ -33,9 +33,9 @@ def main() -> None:
     branch = _git("rev-parse", "--abbrev-ref", "HEAD")
     dirty = bool(_git("status", "--porcelain"))
     built_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    # Read the version from the source file rather than importing sentinel:
+    # Read the version from the source file rather than importing ledgerhound:
     # stamping must work even when the package cannot import (missing deps on
-    # a build box), and importing would pick up an INSTALLED sentinel rather
+    # a build box), and importing would pick up an INSTALLED ledgerhound rather
     # than the checkout being stamped.
     version = "unknown"
     try:
