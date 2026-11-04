@@ -319,10 +319,12 @@ async def test_methodology_on_modern_connection_asks_the_agent_to_ask(session, f
 # -- a real stdio process ---------------------------------------------------- #
 
 def _entry_points():
-    exe = Path(sys.executable).parent / "ledgerhound"
+    bindir = Path(sys.executable).parent
     eps = [("python -m", [sys.executable, "-m", "ledgerhound.mcp"])]
-    if exe.exists():
-        eps.append(("ledgerhound mcp", [str(exe), "mcp"]))
+    for exe in (bindir / "ledgerhound", bindir / "ledgerhound.exe"):
+        if exe.exists():
+            eps.append(("ledgerhound mcp", [str(exe), "mcp"]))
+            break
     return eps
 
 
@@ -371,10 +373,13 @@ def test_stdout_carries_only_protocol(label, cmd, tmp_path, fraud_csv):
     assert set(got) == {1, 2, 3, 4, 5}, (label, got.keys(), err[-2000:])
     assert not rest.strip() or all(json.loads(x) for x in rest.splitlines() if x.strip())
     out_text = b"".join(lines).decode()
-    # The kernel cell's fd-1 write is captured into the cell's own output (it
-    # reaches the agent inside a JSON result), never as a raw line.
+    # The kernel cell's fd-1 write never appears as a raw line. On Linux
+    # ipykernel captures it into the cell's output (inside a JSON result); on
+    # Windows it is not captured and lands on the kernel's inherited fd 1,
+    # which protect_stdout() pointed at stderr. Either way it happened, and
+    # either way it stayed off the wire.
     assert not any(ln.strip() in (b"RAW-FD1-NOISE", b"DUNDER-STDOUT-NOISE") for ln in lines)
-    assert "RAW-FD1-NOISE" in json.dumps(got[4]["result"])
+    assert "RAW-FD1-NOISE" in json.dumps(got[4]["result"]) or "RAW-FD1-NOISE" in err
     # Server-side prints really happened -- on stderr, not nowhere.
     assert "Kernel ready" not in out_text and "Kernel ready" in err
     names = {t["name"] for t in got[2]["result"]["tools"]}
