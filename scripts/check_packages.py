@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""What is Sentinel missing on THIS machine?  Run it on the target box.
+"""What is Ledgerhound missing on THIS machine?  Run it on the target box.
 
     python scripts/check_packages.py
 
-Imports every package Sentinel can use, groups them by what breaks without
+Imports every package Ledgerhound can use, groups them by what breaks without
 each, and prints a ready-to-paste install command for whatever is absent.
 The RAPIDS wheel names are chosen from the CUDA major version the driver
 reports, because a -cu12 wheel on a CUDA 13 box installs and then fails to
@@ -40,7 +40,7 @@ def cuda_major() -> str | None:
 def groups(cu: str):
     """(title, needs_nvidia_index, [(import_name, pip_name, what breaks)])."""
     return [
-        ("REQUIRED -- Sentinel will not run without these", False, [
+        ("REQUIRED -- Ledgerhound will not run without these", False, [
             ("typer", "typer[all]", "the CLI itself"),
             ("rich", "rich", "all terminal output"),
             ("pandas", "pandas", "every dataframe path"),
@@ -132,7 +132,7 @@ def main() -> int:
     print("INSTALL WHAT IS MISSING")
     print("=" * 70)
     if not missing_plain and not missing_nvidia:
-        print("  Nothing missing. Every package Sentinel can use is present.")
+        print("  Nothing missing. Every package Ledgerhound can use is present.")
         return 0
     if missing_nvidia:
         print("\n# RAPIDS / GPU stack (needs NVIDIA's index):")

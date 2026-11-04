@@ -3,19 +3,19 @@
 scripts/publish_wheel.py
 ========================
 
-Build the sentinel-ai wheel and publish it to a MinIO-hosted PyPI-style
-``simple/`` index, so pods can ``sentinel upgrade`` against it.
+Build the ledgerhound wheel and publish it to a MinIO-hosted PyPI-style
+``simple/`` index, so pods can ``ledgerhound upgrade`` against it.
 
 Layout produced in the wheels bucket (PEP 503 "simple repository"):
 
     simple/index.html                  -> links to each project
-    simple/sentinel-ai/index.html      -> links to every published wheel
-    simple/sentinel-ai/<pkg>-<ver>-*.whl
+    simple/ledgerhound/index.html      -> links to every published wheel
+    simple/ledgerhound/<pkg>-<ver>-*.whl
 
-Point pip / `sentinel upgrade` at it via:
+Point pip / `ledgerhound upgrade` at it via:
 
-    export SENTINEL_INDEX_URL="https://<minio-host>/<wheels-bucket>/simple"
-    sentinel upgrade
+    export LEDGERHOUND_INDEX_URL="https://<minio-host>/<wheels-bucket>/simple"
+    ledgerhound upgrade
 
 (That requires the wheels bucket / simple prefix to be HTTP-readable by pods --
 either an anonymous-download policy on the prefix or a fronting proxy. The
@@ -39,9 +39,9 @@ from pathlib import Path
 # Allow running from the repo root without installing the package.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sentinel.io import MinIOStore  # noqa: E402
+from ledgerhound.io import MinIOStore  # noqa: E402
 
-PROJECT = "sentinel-ai"
+PROJECT = "ledgerhound"
 SIMPLE_PREFIX = "simple"
 PROJ_PREFIX = f"{SIMPLE_PREFIX}/{PROJECT}"
 
@@ -130,8 +130,8 @@ def main() -> None:
 
     index_path = publish(store, wheels)
     print("\nPublished. To consume from a pod:")
-    print(f'  export SENTINEL_INDEX_URL="https://<minio-host>/{index_path}"')
-    print("  sentinel upgrade")
+    print(f'  export LEDGERHOUND_INDEX_URL="https://<minio-host>/{index_path}"')
+    print("  ledgerhound upgrade")
 
 
 if __name__ == "__main__":

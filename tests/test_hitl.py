@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.analyst.hitl import HITLGate, auto_yes, classify_action, resolve_high_answer
-from sentinel.cli.prompts import confirm_prompt
-from sentinel.tools import ToolDef
+from ledgerhound.analyst.hitl import HITLGate, auto_yes, classify_action, resolve_high_answer
+from ledgerhound.cli.prompts import confirm_prompt
+from ledgerhound.tools import ToolDef
 from tests.conftest import calls, reply, tool_call
 
 DECLINE = ["no", "n", "No", "N", "NO", "", "   ", None, "nah", "stop", "cancel",

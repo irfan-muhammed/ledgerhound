@@ -1,13 +1,13 @@
-# Sentinel -- DeepSeek API configuration (legacy, literal-value style)
+# Ledgerhound -- DeepSeek API configuration (legacy, literal-value style)
 #
 # NEW SETUPS: prefer configs/api.yaml + main_config.yaml instead -- no env
 # var to export, and switching providers (DeepSeek -> GLM -> ...) is
 # editing main_config.yaml, not this file. See main_config.example.yaml.
 #
 # This file still works as-is: reads the API key from the
-# SENTINEL_DEEPSEEK_API_KEY env var (never commit a literal key). Usage:
-#   export SENTINEL_DEEPSEEK_API_KEY="sk-..."
-#   sentinel shell   (then: /model configs/deepseek.yaml)
+# LEDGERHOUND_DEEPSEEK_API_KEY env var (never commit a literal key). Usage:
+#   export LEDGERHOUND_DEEPSEEK_API_KEY="sk-..."
+#   ledgerhound shell   (then: /model configs/deepseek.yaml)
 
 llm:
   provider: api
@@ -16,7 +16,7 @@ llm:
   # catalogue (GET /v1/models) is deepseek-flash and deepseek-v4-pro.
   model: "deepseek-flash"
   model_fallback: "deepseek-v4-pro"
-  api_key_env: "SENTINEL_DEEPSEEK_API_KEY"
+  api_key_env: "LEDGERHOUND_DEEPSEEK_API_KEY"
   verify_ssl: true
   temperature: 0.6
   max_tokens: 8192

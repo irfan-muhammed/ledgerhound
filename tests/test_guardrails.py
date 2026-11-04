@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from sentinel.analyst.hitl import HITLGate
-from sentinel.shell.session_goal import SessionGoal
+from ledgerhound.analyst.hitl import HITLGate
+from ledgerhound.shell.session_goal import SessionGoal
 
 FIT = ("from sklearn.linear_model import LogisticRegression\n"
        "m = LogisticRegression().fit(df[['amount']], df.is_fraud)")

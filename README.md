@@ -1,4 +1,9 @@
-# Sentinel AI — Agentic EDA for UPI Fraud & Mule Modeling
+# Ledgerhound — Agentic EDA for UPI Fraud & Mule Modeling
+
+> **Renamed from Sentinel.** The package, CLI and config are now
+> `ledgerhound`. Old `SENTINEL_*` environment variables are still read (with
+> a deprecation warning), and existing `.sentinel/` folders, `SENTINEL.md`
+> and `sentinel_workspace/` are renamed automatically on first run.
 
 > Autonomous evidence generation for fraud feature engineering teams.
 > Not a BI tool. Not a dashboard. A statistically rigorous, compute-aware
@@ -22,7 +27,7 @@ a convention nobody has ever validated against the true population. The non-frau
 model trains on might be systematically biased in ways nobody has measured. Feature signal
 decays as fraudsters adapt, but nobody tracks this until the model degrades in production.
 
-Sentinel exists to fix all of this — with numbers, not intuition.
+Ledgerhound exists to fix all of this — with numbers, not intuition.
 
 ---
 
@@ -41,10 +46,10 @@ coverage of every module: most of the ~80k lines still have no tests.
 (Earlier drafts of this README claimed ~2,700 tests; they were never
 committed.)
 
-### The live path: `sentinel shell` *(the actual product today)*
+### The live path: `ledgerhound shell` *(the actual product today)*
 
 Everything below in this subsection is the CLI shell (`ConversationalAnalyst`,
-`sentinel/shell/conversation.py`) — the engine a user actually talks to. The
+`ledgerhound/shell/conversation.py`) — the engine a user actually talks to. The
 v4 pipeline described next has **no production caller yet**; this does.
 
 - **GPU-first, not GPU-optional.** Kernel mode eagerly initialises RMM
@@ -98,7 +103,7 @@ v4 pipeline described next has **no production caller yet**; this does.
   production-specific is packaged by default. See `main_config.example.yaml`
   for every setting the project reads.
 
-### v4 — sample construction and certification *(new, `sentinel/pipeline/`)*
+### v4 — sample construction and certification *(new, `ledgerhound/pipeline/`)*
 
 The v4 work answers a specific question: *was this training sample built the
 way it claims to have been?* Twelve modules; per-module rationale lives in
@@ -149,7 +154,7 @@ Stated plainly because a reader should not have to infer it:
 - **Scale is untested** — largest frame tried was ~200k rows against an
   8-crore target.
 - **The gate has no production caller.** Nothing in `cli/` or `shell/`
-  imports `sentinel.pipeline` yet. Intended for Kubeflow components, which
+  imports `ledgerhound.pipeline` yet. Intended for Kubeflow components, which
   import libraries directly; no Kubeflow deployment has been validated.
 - **Label rules are undecided**, so the pipeline cannot run end to end until
   the fraud team confirms which typologies apply at which scope.
@@ -159,7 +164,7 @@ Stated plainly because a reader should not have to infer it:
   found and fixed a real bug — the router sized GPU capacity off *total*
   card memory only, so on a *shared* GPU (another process already holding
   most of it) it would have greenlit cuDF into headroom that didn't exist;
-  it now checks free memory too. `sentinel shell` auto-detects a GPU and
+  it now checks free memory too. `ledgerhound shell` auto-detects a GPU and
   defaults to kernel mode (the only execution path with a cuDF branch) so
   acceleration is reachable without a flag. Still not done: this repo's own
   pipeline/aggregation code has never run on a GPU (only the CLI/shell
@@ -182,7 +187,7 @@ The confirmed fraud data is small enough to run entirely on a local H100 GPU wit
 The non-fraud population is not. No amount of hardware makes it feasible to bring billions
 of rows to the GPU for EDA.
 
-Sentinel's answer: **never bring the population to the compute — bring the questions to the
+Ledgerhound's answer: **never bring the population to the compute — bring the questions to the
 population as push-down aggregation queries, then bring only the statistically necessary
 sample back locally.**
 
@@ -199,7 +204,7 @@ The real fraud rate in UPI is **1:100,000 or worse** — not 1:1000. The current
 convention of training at 1:1000 is an undersampled non-fraud set, and nobody has proven
 it is a *good* undersampled set.
 
-Sentinel's position: **any change to the sampling ratio requires statistical evidence, not
+Ledgerhound's position: **any change to the sampling ratio requires statistical evidence, not
 opinion.** The EDA produces a three-way comparison:
 
 ```
@@ -216,7 +221,7 @@ features, that is the evidence required to change the strategy — quantified by
 
 ---
 
-## What Sentinel Delivers
+## What Ledgerhound Delivers
 
 > **This section is the original phased design, not a status report.** Much
 > of Phases 1–3 is built; Phase 4 is partly built. For what actually exists
@@ -258,29 +263,29 @@ features, that is the evidence required to change the strategy — quantified by
 |---|---|
 | **Retrospective Claim Validator** | Runs EDA on historical data. Scores every agent claim against what actually happened. Precision and recall for the EDA tool itself. |
 | **Targeted Holdout Test Sets** | Four dimensions: hard negative set, rare typology set, temporal holdout, label-contaminated set. Replaces "overall AUC" with four surgical benchmarks. |
-| **Drift Detection Lead Time** | How many weeks before model performance degrades does Sentinel detect the underlying drift? This is the number that goes in front of leadership. |
+| **Drift Detection Lead Time** | How many weeks before model performance degrades does Ledgerhound detect the underlying drift? This is the number that goes in front of leadership. |
 
 ---
 
-## Where Sentinel Beats Humans
+## Where Ledgerhound Beats Humans
 
-These are not areas where Sentinel is *better* — they are areas where the task is
-**humanly infeasible at this scale** and Sentinel makes it feasible:
+These are not areas where Ledgerhound is *better* — they are areas where the task is
+**humanly infeasible at this scale** and Ledgerhound makes it feasible:
 
 **PSI across all features against true population.** A data scientist can check 10–20
-features in a day. Sentinel checks all 200+ in minutes, against a billion-row population,
+features in a day. Ledgerhound checks all 200+ in minutes, against a billion-row population,
 every time, with consistent methodology.
 
 **Feature signal decay tracking.** Monthly univariate AUC across all features over
 18 months. No human does this as part of regular workflow — it is too tedious.
-Sentinel does it automatically every session.
+Ledgerhound does it automatically every session.
 
 **Institutional memory.** A human analyst's findings live in a notebook nobody revisits
-after they leave the team. Sentinel's dataset knowledge base accumulates across every
+after they leave the team. Ledgerhound's dataset knowledge base accumulates across every
 session and every analyst. The 6-month-old finding about the null spike in column X is
 still there when the new team member joins.
 
-**Consistent methodology.** Humans cut corners on their 50th EDA iteration. Sentinel
+**Consistent methodology.** Humans cut corners on their 50th EDA iteration. Ledgerhound
 applies the same statistical tests every time with no fatigue.
 
 **Reproducibility.** Every finding has code, every sample has provenance, every chart
@@ -288,18 +293,18 @@ has the query that generated it. Any result can be regenerated from scratch.
 
 ---
 
-## Where Sentinel Does Not Try to Compete
+## Where Ledgerhound Does Not Try to Compete
 
 These are deliberate non-goals. Building them would dilute the above:
 
 | Out of Scope | Why |
 |---|---|
 | Real-time fraud scoring | Different product. Requires low-latency serving infrastructure. |
-| Model training | Sentinel feeds the FE team. Half-baked model training produces metrics people quote incorrectly. |
+| Model training | Ledgerhound feeds the FE team. Half-baked model training produces metrics people quote incorrectly. |
 | Full graph analysis at population scale | Requires Neo4j/GraphX. Not feasible on this stack. Will consume months with nothing to show. |
 | SMOTE at billion-row scale | Pairwise distance at this scale is infeasible. Hard negative mining (filtering, not generation) achieves more with less. |
 | Causal inference / counterfactuals | Fraud behavior is adversarial and non-stationary. Causal claims in this domain are unreliable. High effort, low trust. |
-| PII detection or anonymization | Compliance problem. Sentinel assumes data arrives clean. |
+| PII detection or anonymization | Compliance problem. Ledgerhound assumes data arrives clean. |
 | Overall model AUC as primary benchmark | Too indirect, too many confounders, takes months. Wrong metric for an EDA tool. |
 
 ---
@@ -309,12 +314,12 @@ These are deliberate non-goals. Building them would dilute the above:
 ### Tier 1 — Measurable Immediately (Before Any Model Training)
 
 **Sample representativeness score:** PSI of current 1:1000 sample vs true population,
-vs PSI of Sentinel-certified sample vs true population. Baseline is the current sample.
-Sentinel wins if its certified sample has lower PSI on the top-K discriminative features.
+vs PSI of Ledgerhound-certified sample vs true population. Baseline is the current sample.
+Ledgerhound wins if its certified sample has lower PSI on the top-K discriminative features.
 
 **Hard negative inclusion rate:** What percentage of the agent-identified boundary region
 (non-fraud closest to fraud cluster) is present in the current training sample vs
-the Sentinel-certified sample. Current random sample: near zero. Target: 5–10x more.
+the Ledgerhound-certified sample. Current random sample: near zero. Target: 5–10x more.
 
 **Contamination rate estimation accuracy:** Validate the survivor bias estimate against
 accounts in the non-fraud set that were later confirmed as mule/fraud cases.
@@ -333,13 +338,13 @@ Four targeted holdout sets instead of one:
 ### Tier 3 — The Number That Goes to Leadership
 
 **Drift detection lead time:** When does model performance visibly degrade in production
-vs when does Sentinel first detect the underlying drift? If Sentinel detects drift
+vs when does Ledgerhound first detect the underlying drift? If Ledgerhound detects drift
 6 weeks before performance degrades, that 6 weeks is the value. Fraud victims not
-caught in those 6 weeks is the cost of not having Sentinel.
+caught in those 6 weeks is the cost of not having Ledgerhound.
 
 ### Tier 4 — The EDA Tool's Own Score (Retrospective Claim Validation)
 
-Every EDA claim Sentinel produces is a testable hypothesis. Running the agent on
+Every EDA claim Ledgerhound produces is a testable hypothesis. Running the agent on
 historical data and scoring its claims against what actually happened gives the tool
 its own precision/recall metric — independent of the FE team's work.
 
@@ -351,7 +356,7 @@ Grouped by role rather than listed exhaustively — 43 packages, so an
 alphabetical dump would obscure more than it shows.
 
 ```
-sentinel/
+ledgerhound/
 │
 │  ── SAMPLE CONSTRUCTION & CERTIFICATION (v4) ──────────────────────────
 ├── pipeline/           # Build the sample, then certify HOW it was built
@@ -402,7 +407,7 @@ sentinel/
 ├── scorecard/ project/ workspace/ session/  # scorecards; project + artifacts
 │
 │  ── INTERFACES ────────────────────────────────────────────────────────
-├── cli/                # `sentinel` CLI (~100 commands)
+├── cli/                # `ledgerhound` CLI (~100 commands)
 ├── llm/                # LLM client (vLLM / OpenAI-compatible); model discovery/selection, ask-once API keys
 └── integrations/       # Jira, git, MinIO
 ```
@@ -412,7 +417,7 @@ This repository ships the CLI only. There is no web front-end in it.
 ### Workspace on Disk
 
 ```
-sentinel_workspace/
+ledgerhound_workspace/
 ├── datasets/
 │   ├── registry.json
 │   └── upi_summary_v1/
@@ -505,11 +510,11 @@ pip install -e ".[s3,tokenizers,test]"
 cp main_config.example.yaml main_config.yaml
 
 # 3. check the machine
-sentinel doctor
+ledgerhound doctor
 cat /sys/fs/cgroup/memory.max && df -h /dev/shm      # memory limit + RAM disk for /s3 data
 
 # 4. start (any folder; the project folder is created if absent)
-sentinel shell --project ~/work/july-mules --use-kernel
+ledgerhound shell --project ~/work/july-mules --use-kernel
 ```
 
 Inside the shell:
@@ -585,11 +590,11 @@ can run a different method/model, or be left blank to self-judge), real
 institutional knowledge kept **outside** this repo
 (`knowledge.profiles_dir` / `knowledge.knowledge_dir`), GPU tuning, Trino,
 identity, and integrations. Nothing to `export` before every
-session — `sentinel shell` reads the file directly.
+session — `ledgerhound shell` reads the file directly.
 
 Every setting still has an environment-variable fallback (named in
 `main_config.example.yaml`) for production paths that inject env vars
-directly — e.g. Kubeflow's PodDefault for `SENTINEL_USER` — but
+directly — e.g. Kubeflow's PodDefault for `LEDGERHOUND_USER` — but
 `main_config.yaml` wins when both are present.
 
 ### Team object store (MinIO) — `/minio --key`
@@ -611,7 +616,7 @@ the simplest setup. Or leave `secret_key` blank and set it inside the
 shell:
 
 ```
-sentinel shell
+ledgerhound shell
 you > /minio --key          # hidden prompt; checked against the store before it is saved
 you > /minio                # status + connection test
 you > /minio --clear        # forget saved keys
@@ -630,10 +635,10 @@ With `/s3` data, feature tables are uploaded back to
 installed: `pip install ".[s3]"`). See `docs/USER_GUIDE.md`, "Loading
 data".
 
-The secret is saved to `~/.sentinel/credentials.json` (owner-only), never sent to
+The secret is saved to `~/.ledgerhound/credentials.json` (owner-only), never sent to
 the model and never logged. A secret the store rejects is not saved.
 `MINIO_SECRET_KEY` in the environment overrides it for pods.
-`sentinel doctor` checks the connection; `python scripts/prod_checks.py`
+`ledgerhound doctor` checks the connection; `python scripts/prod_checks.py`
 checks the whole deployment. Details: `docs/USER_GUIDE.md`, "The team
 object store".
 
@@ -653,21 +658,21 @@ trino:
   use: true
 ```
 
-Environment variables (`SENTINEL_TRINO_HOST`, `_PORT`, `_USER`,
+Environment variables (`LEDGERHOUND_TRINO_HOST`, `_PORT`, `_USER`,
 `_PASSWORD`, `_CATALOG`, `_SCHEMA`, `_HTTP_SCHEME`, `_USE`) still work as a
 fallback for each field individually if `main_config.yaml` doesn't set it.
 
 To run in local-only mode (no Trino):
 
 ```bash
-sentinel eda --no-trino "What are the top fraud features?"
+ledgerhound eda --no-trino "What are the top fraud features?"
 ```
 
 ---
 
 ## Quick Start
 
-The primary interface is the **fluid analyst shell** (`sentinel shell`) — one
+The primary interface is the **fluid analyst shell** (`ledgerhound shell`) — one
 command, no fixed pipeline. A short grounding on-ramp (goal -> data ->
 output-format), then the analyst reasons over its tools to reach your goal,
 human-in-the-loop on the big calls. It also handles the chores — opt-in **git**
@@ -679,7 +684,7 @@ pip install -e ".[s3,tokenizers,test]"
 cp main_config.example.yaml main_config.yaml   # fill llm.gateway + minio; the LLM key can
                                                # stay blank -- the shell asks once
 
-sentinel shell --project ./run1 --use-kernel
+ledgerhound shell --project ./run1 --use-kernel
 #   (first run on a machine: mandatory work login, asked once)
 #   model discovery/selection happens automatically (best available picked,
 #   or a pick-list if you're at a terminal) -- --model <id> to pin one
@@ -696,21 +701,21 @@ sentinel shell --project ./run1 --use-kernel
 ### Try it without an LLM
 
 ```bash
-python -c "from pathlib import Path; from sentinel.data.synthetic import UpiSyntheticGenerator as G; G(n_accounts=5000).generate().save(Path('sample_run'))"
-sentinel profile --data sample_run/upi_summary.parquet --target is_fraud --output sample_run/digest.yaml
+python -c "from pathlib import Path; from ledgerhound.data.synthetic import UpiSyntheticGenerator as G; G(n_accounts=5000).generate().save(Path('sample_run'))"
+ledgerhound profile --data sample_run/upi_summary.parquet --target is_fraud --output sample_run/digest.yaml
 ```
 
-Artifacts land per project under `.sentinel/` (books, sessions, findings,
+Artifacts land per project under `.ledgerhound/` (books, sessions, findings,
 journals). Skills inject institutional method; books make understanding compound
 across sessions.
 
 ### Library / scripted use
 
 ```python
-from sentinel.workspace.layout import WorkspaceLayout
-from sentinel.trino.config import TrinoConfig
-from sentinel.trino.client import TrinoClient
-from sentinel.memory.knowledge import DatasetKnowledge
+from ledgerhound.workspace.layout import WorkspaceLayout
+from ledgerhound.trino.config import TrinoConfig
+from ledgerhound.trino.client import TrinoClient
+from ledgerhound.memory.knowledge import DatasetKnowledge
 
 # Initialize workspace
 ws = WorkspaceLayout.from_cwd()
@@ -741,12 +746,12 @@ stats = client.execute_stats_only("""
 
 ## Telemetry & Observability — what is written, and where
 
-Sentinel writes two kinds of record. They serve different purposes and live in
+Ledgerhound writes two kinds of record. They serve different purposes and live in
 different places; **neither is sent anywhere.** Everything below is a local
 file on the machine (or the mounted volume) that ran the session.
 
 There is no analytics SDK, no phone-home and no third-party collector in the
-package — verified by grep, not by assertion. The only outbound calls Sentinel
+package — verified by grep, not by assertion. The only outbound calls Ledgerhound
 ever makes are ones you configure yourself: the LLM endpoint, and the opt-in
 integrations (a drift-alert webhook, Jira, git). None of them carry the logs
 described here.
@@ -755,19 +760,19 @@ described here.
 
 | | |
 |---|---|
-| **Path** | `~/.sentinel/sessions.jsonl` |
-| **Override** | `observability.sessions_log` in `main_config.yaml`, or `$SENTINEL_SESSIONS_LOG` |
+| **Path** | `~/.ledgerhound/sessions.jsonl` |
+| **Override** | `observability.sessions_log` in `main_config.yaml`, or `$LEDGERHOUND_SESSIONS_LOG` |
 | **Grain** | One compact line per **turn**, from every user, every project |
 | **Contents** | Counts only — tool calls, errors, refusals, HITL pauses. **Not** their bodies, not code, not data |
 | **Size control** | Rotating, 20 MB x 10 backups. The one-line-per-turn grain is the real control; rotation is the safety net |
 
-This is the file to point at shared storage when Sentinel runs as a service
+This is the file to point at shared storage when Ledgerhound runs as a service
 for other people, so every pod and user appends to one place:
 
 ```yaml
 # main_config.yaml
 observability:
-  sessions_log: /mnt/shared/sentinel/sessions.jsonl
+  sessions_log: /mnt/shared/ledgerhound/sessions.jsonl
 ```
 
 Because a line lands on **every turn** rather than at clean exit, a crashed or
@@ -778,8 +783,8 @@ the same `run_id` are its history turn over turn.
 Read it with:
 
 ```sh
-sentinel sessions collect       # gather records
-sentinel sessions report        # summarise across sessions
+ledgerhound sessions collect       # gather records
+ledgerhound sessions report        # summarise across sessions
 ```
 
 ### 2. Per-run forensic record
@@ -801,11 +806,11 @@ unbounded, never rotated — this is the audit trail.
 
 `findings.jsonl` and `session_code.py` are generated from `events.jsonl` by the
 same projection functions used live and in bulk, so the live files and a
-regenerated set cannot drift. Regenerate with `sentinel run-views <run_dir>`.
+regenerated set cannot drift. Regenerate with `ledgerhound run-views <run_dir>`.
 
 ### 3. Project state
 
-`<project>/.sentinel/` holds durable state rather than logs — `project.json`,
+`<project>/.ledgerhound/` holds durable state rather than logs — `project.json`,
 `dataset_cards/` (one card per dataset, content-hash keyed), `books/` (the
 Librarian), `findings/`, and `sessions/`.
 
@@ -820,6 +825,6 @@ hash of the full text, and the profiler reports statistics rather than rows.
 
 ## The One-Line Promise
 
-Sentinel gives the fraud modeling team **statistically audited, falsifiable, institutionally
+Ledgerhound gives the fraud modeling team **statistically audited, falsifiable, institutionally
 remembered evidence** — the kind that justifies changing a sampling ratio, retiring a dying
 feature, or telling leadership exactly how many weeks of early warning the system provides.

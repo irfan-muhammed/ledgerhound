@@ -1,8 +1,8 @@
 # ════════════════════════════════════════════════════════════════
-# Sentinel LLM Configuration
+# Ledgerhound LLM Configuration
 # ════════════════════════════════════════════════════════════════
 # Copy this file, uncomment the section you want, and pass it:
-#   sentinel eda --digest digest.yaml --llm-config configs/llm_config.yaml
+#   ledgerhound eda --digest digest.yaml --llm-config configs/llm_config.yaml
 #
 # Two modes:
 #   1. API mode (provider: api) — talks to a remote endpoint
@@ -24,9 +24,9 @@ llm:
 # Uncomment this block and comment out Option 1 above.
 # Requires: pip install torch transformers bitsandbytes accelerate
 #
-# GPU allocation: with a local model, Sentinel reserves ONE GPU for the LLM
+# GPU allocation: with a local model, Ledgerhound reserves ONE GPU for the LLM
 # (GPU0 by default) and gives the remaining GPUs to cuDF/compute. Leave
-# device_map at "auto" and Sentinel pins it to the reserved GPU for you -- it
+# device_map at "auto" and Ledgerhound pins it to the reserved GPU for you -- it
 # does NOT shard across every GPU any more. Set device_map explicitly (e.g.
 # "cuda:1") to override. (With a remote API model instead -- gateway Kimi,
 # DeepSeek -- no GPU is reserved and GPU0 goes to cuDF.)
@@ -36,7 +36,7 @@ llm:
 #   model: "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
 #   hf_home: "/data/.cache/huggingface/"
 #   quantize_4bit: true
-#   device_map: "auto"      # auto -> Sentinel pins to the reserved GPU (GPU0)
+#   device_map: "auto"      # auto -> Ledgerhound pins to the reserved GPU (GPU0)
 #   max_new_tokens: 2048
 #   temperature: 0.6
 #   do_sample: false

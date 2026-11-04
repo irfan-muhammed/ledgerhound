@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from sentinel.runtime.events import GENESIS_HASH, EventStream
+from ledgerhound.runtime.events import GENESIS_HASH, EventStream
 
 
 @pytest.fixture
@@ -77,7 +77,7 @@ def test_reordered_events_are_detected(stream):
 def test_rehashed_forgery_still_breaks_the_next_link(stream):
     """Editing one event AND recomputing its own hash still breaks the
     following event's prev_hash -- the chain, not each line, is the proof."""
-    from sentinel.runtime.events import content_hash
+    from ledgerhound.runtime.events import content_hash
 
     def forge(rows):
         r = rows[1]

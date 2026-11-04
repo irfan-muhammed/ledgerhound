@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from sentinel.llm.client import LLMResponse
+from ledgerhound.llm.client import LLMResponse
 
 _ids = itertools.count()
 
@@ -62,11 +62,11 @@ def _isolated_env(tmp_path, monkeypatch):
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
-    monkeypatch.setenv("SENTINEL_SESSIONS_LOG", str(tmp_path / "sessions.jsonl"))
-    monkeypatch.setenv("SENTINEL_RESULTS_ROOT", str(tmp_path / "results"))
+    monkeypatch.setenv("LEDGERHOUND_SESSIONS_LOG", str(tmp_path / "sessions.jsonl"))
+    monkeypatch.setenv("LEDGERHOUND_RESULTS_ROOT", str(tmp_path / "results"))
     monkeypatch.chdir(tmp_path)
     try:  # the master-config cache is process-wide; start each test empty
-        from sentinel.config import _CACHE
+        from ledgerhound.config import _CACHE
         _CACHE.clear()
     except Exception:  # noqa: BLE001
         pass
@@ -92,7 +92,7 @@ def make_analyst(tmp_path):
     """Build a ConversationalAnalyst wired to a ScriptedLLM, with output
     under tmp_path and a silent renderer. Exec mode, no kernel, no
     compaction -- the fast, deterministic configuration."""
-    from sentinel.shell.conversation import ConversationalAnalyst
+    from ledgerhound.shell.conversation import ConversationalAnalyst
 
     built = []
 

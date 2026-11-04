@@ -1,8 +1,8 @@
-# Sentinel -- User Guide
+# Ledgerhound -- User Guide
 
 **Version 0.7.9** (2026-10-05)
 
-A practical, task-oriented manual for the `sentinel shell` -- the
+A practical, task-oriented manual for the `ledgerhound shell` -- the
 Claude-Code-style conversational analyst.
 
 > **New in 0.7.0 -- the inference gates.** Earlier versions gated what gets
@@ -61,12 +61,12 @@ Both object-store keys can go here. `main_config.yaml` is gitignored, so
 nothing in it is ever pushed. (If you would rather not keep the secret in
 a file, leave it blank and use `/minio --key` in step 6.) The shell finds
 `main_config.yaml` in the folder you launch from, the repo, or
-`$SENTINEL_MAIN_CONFIG` -- and you can launch from any folder.
+`$LEDGERHOUND_MAIN_CONFIG` -- and you can launch from any folder.
 
 **4. Check the environment.**
 
 ```bash
-sentinel doctor                      # your login, results folder, config, keys, object store, tokenizer
+ledgerhound doctor                      # your login, results folder, config, keys, object store, tokenizer
 cat /sys/fs/cgroup/memory.max        # the pod's real memory limit ("max" = none)
 df -h /dev/shm                       # the RAM disk /s3 copies data into
 ```
@@ -78,7 +78,7 @@ the data *in memory* as well (roughly 3-10x the Parquet size in pandas).
 **5. Start the shell** on a project folder (created if absent):
 
 ```bash
-sentinel shell --project ~/work/july-mules --use-kernel
+ledgerhound shell --project ~/work/july-mules --use-kernel
 ```
 
 - First run on a machine: it asks for your `work` email once.
@@ -137,7 +137,7 @@ Ask for a report ("save a report") and it is written into the run folder.
 feature tables are already in the bucket.
 
 **Where everything is saved -- one folder, strictly.** By default
-Sentinel writes only here, one level above the folder you launch from:
+Ledgerhound writes only here, one level above the folder you launch from:
 
 ```
 ../Agentic_eda_results/<username>/
@@ -155,8 +155,8 @@ folder or next to your data. The only other places are:
 |---|---|
 | `s3://sentinel-data/outputs/<you>/<run>/features/` (`/s3` data) | feature tables, uploaded after every step |
 | `s3://sentinel-data/kb/v1/` | the team knowledge base: every card, answer, finding and book, shared |
-| `~/.sentinel/kb_outbox/` | team-knowledge updates not uploaded yet (retried automatically) |
-| `~/.sentinel/` | machine-level state: saved keys (owner-only), your login, the team-knowledge upload queue |
+| `~/.ledgerhound/kb_outbox/` | team-knowledge updates not uploaded yet (retried automatically) |
+| `~/.ledgerhound/` | machine-level state: saved keys (owner-only), your login, the team-knowledge upload queue |
 
 Any of the three folders can be moved in `main_config.yaml`
 (`paths.results_root`, `paths.run_outputs_dir`, `paths.data_cache_dir`,
@@ -216,33 +216,33 @@ modeling/feature-selection stack.
 block (section 0, step 3 shows the minimum), then:
 
 ```bash
-sentinel doctor                             # verifies version, config, keys, object store, tokenizer
+ledgerhound doctor                             # verifies version, config, keys, object store, tokenizer
 ```
 
-The LLM key can be left blank: `sentinel shell` prompts for it the first
+The LLM key can be left blank: `ledgerhound shell` prompts for it the first
 time it's actually needed and remembers it (see "API keys, asked once"
 below). A literal key in `main_config.yaml` or an env var
-(`SENTINEL_GATEWAY_API_KEY` for the organization gateway) takes priority over that
+(`LEDGERHOUND_GATEWAY_API_KEY` for the organization gateway) takes priority over that
 prompt.
 
-**Step 5 — first launch.** The very first time `sentinel shell` runs on a
+**Step 5 — first launch.** The very first time `ledgerhound shell` runs on a
 machine, it asks for your `work` email (mandatory, validated) and
 derives your username from it -- stored locally, never asked again. Then
-point the shell at a folder for your project (it creates `.sentinel/` there):
+point the shell at a folder for your project (it creates `.ledgerhound/` there):
 
 ```bash
-sentinel shell --project ./my-analysis
+ledgerhound shell --project ./my-analysis
 ```
 
 It can be launched from any folder: the LLM config named by `llm.method`
-(`configs/gateway.yaml` for the organization gateway) is found in the Sentinel
+(`configs/gateway.yaml` for the organization gateway) is found in the Ledgerhound
 checkout even when you are elsewhere. `--llm-config <yaml>` picks a
 different one.
 
 When the shell opens it prints a banner showing the model, project, run
 folder, and which **integrations** are switched on (see section 5).
 
-**Model selection.** On startup, Sentinel queries the configured endpoint for
+**Model selection.** On startup, Ledgerhound queries the configured endpoint for
 what it actually serves (`GET /models`) and picks the best one automatically
 (thinking/pro variants preferred over flash/mini/distilled) -- at an
 interactive terminal with more than one model available, it shows a pick-list
@@ -287,7 +287,7 @@ stops over any of them. If a loaded tokenizer disagrees with the gateway's
 own count twice in a row, the shell prints `[count_mismatch]`, drops that
 tokenizer, and keeps calibrating from the gateway.
 
-**The team object store (`/minio`).** Sentinel keeps shared files -- the
+**The team object store (`/minio`).** Ledgerhound keeps shared files -- the
 tokenizers today, the team knowledge base next -- in the org's S3-compatible
 store. Where it is lives in `main_config.yaml`:
 
@@ -316,14 +316,14 @@ files, leave `secret_key` blank and set it from inside the shell:
 ```
 you > /minio --key
 MinIO secret key (input hidden):
-secret verified -- objectstore.example.com:9000 reachable, bucket 'sentinel-data' visible with these credentials. Saved to ~/.sentinel/credentials.json (owner-only); it is not shown or logged anywhere.
+secret verified -- objectstore.example.com:9000 reachable, bucket 'sentinel-data' visible with these credentials. Saved to ~/.ledgerhound/credentials.json (owner-only); it is not shown or logged anywhere.
 ```
 
 How it behaves:
 - A secret the store **rejects is not saved** -- a typo can't replace a
   working key. If the store can't be reached (for example off the org's
   network), the key is saved and the reply says it is **unverified**.
-- Keys are stored in `~/.sentinel/credentials.json`, readable only by you.
+- Keys are stored in `~/.ledgerhound/credentials.json`, readable only by you.
   `MINIO_SECRET_KEY` / `MINIO_ACCESS_KEY` in the environment take priority
   (pod secrets).
 - A new key takes effect immediately: the tokenizer is re-loaded in the
@@ -332,7 +332,7 @@ How it behaves:
   command that carries a secret -- `/mino --key abc` -- is **not** sent to
   the model either; you get "unknown command ... NOT sent to the model".
 - `/config` shows the store's endpoint and whether each key is set;
-  `sentinel doctor` checks the connection and the tokenizer.
+  `ledgerhound doctor` checks the connection and the tokenizer.
 
 **Loading data: `/local` and `/s3`.** Say where the data is, and where it
 comes from decides where this run's outputs go.
@@ -379,7 +379,7 @@ redirected into `features_dir` with a `WRITE REDIRECTED` line. Two files
 with the same name from different folders never overwrite each other.
 
 **Questions about the data -- asked, never assumed.** Once the data is
-profiled, Sentinel lists what it must not guess and the agent asks you
+profiled, Ledgerhound lists what it must not guess and the agent asks you
 before any analysis:
 
 ```
@@ -434,7 +434,7 @@ reused only if it was computed on exactly the same content.
 
 Nothing is ever lost: every save writes a NEW object in
 `s3://<bucket>/kb/v1/` (nothing is overwritten, so two people saving at
-once both land), and every save first goes to `~/.sentinel/kb_outbox/` on
+once both land), and every save first goes to `~/.ledgerhound/kb_outbox/` on
 disk and leaves it only once the store has it -- a network outage, a
 missing secret or a crash just delays the upload to the next save or
 start. `/paths` shows the status (`N update(s) waiting to upload`). Turn
@@ -443,16 +443,16 @@ it off for a sandbox with `minio.team_kb: false`.
 **The organization gateway is `gateway`.** `llm.method` (and `judge.method`) is one
 of `self`, `gateway` or `api`, with a block of the same name holding
 `base_url`, `model` and `api_key`; the key env var is
-`SENTINEL_GATEWAY_API_KEY`. Any other method name stops startup with a
+`LEDGERHOUND_GATEWAY_API_KEY`. Any other method name stops startup with a
 message saying exactly that. A project that remembers an LLM config file
 which no longer exists falls back to the one `llm.method` names
 (`configs/gateway.yaml`) and saves it.
 
 **API keys, asked once.** If a `main_config.yaml`-based config genuinely has
-no key configured anywhere, `sentinel shell` prompts for one the first time
-it's needed and stores it at `~/.sentinel/credentials.json` -- never asked
+no key configured anywhere, `ledgerhound shell` prompts for one the first time
+it's needed and stores it at `~/.ledgerhound/credentials.json` -- never asked
 again after that. If the gateway later rejects a request as an auth failure
-(expired/revoked key), Sentinel identifies that specifically (not a generic
+(expired/revoked key), Ledgerhound identifies that specifically (not a generic
 error), clears the stored key, and prompts once more -- your next message
 just works with the new key, no restart needed.
 
@@ -557,7 +557,7 @@ them. A family's tools only appear when that integration is switched on:
   tools).
 
 You never edit config files by hand. Paste a value in the chat and the agent
-files it for you -- secrets go to a gitignored `.sentinel/secrets.env`, and the
+files it for you -- secrets go to a gitignored `.ledgerhound/secrets.env`, and the
 config only ever stores the *name* of the environment variable, never the
 secret itself. The agent's own record of the value is redacted before it is
 logged.
@@ -566,13 +566,13 @@ One honest caveat: the line **you type** is sent to the model and kept in
 that session's transcript, so a token pasted into chat is in that run
 folder's logs. For the object store always use `/minio --key` (hidden
 prompt, never logged). For a Jira token you'd rather not paste, put
-`SENTINEL_JIRA_TOKEN=<token>` on a line in `.sentinel/secrets.env` (or
+`LEDGERHOUND_JIRA_TOKEN=<token>` on a line in `.ledgerhound/secrets.env` (or
 export it) and just give the agent the URL and email.
 
 ```
 you > here's my Jira: https://myorg.atlassian.net, email me@myorg.com,
       token ATATT3xFfGF0...
-sentinel > (confirms, stores URL+email in config.yaml, token in secrets.env)
+ledgerhound > (confirms, stores URL+email in config.yaml, token in secrets.env)
            jira integration switched on
 ```
 
@@ -586,9 +586,9 @@ From the next turn, Jira tools are live.
   **message is auto-drafted from what you actually did this session** (your
   findings and actions). You see every file and the message, then confirm.
   - It pushes the branch you are on, not a fixed `main`.
-  - It **refuses** to commit anything that looks like data or Sentinel
+  - It **refuses** to commit anything that looks like data or Ledgerhound
     output -- `.parquet`/`.csv`/`.jsonl` and similar, anything under
-    `run_outputs/`, `features/`, `scratch/`, `.sentinel/`, or any file over
+    `run_outputs/`, `features/`, `scratch/`, `.ledgerhound/`, or any file over
     5 MB -- and lists them. Customer data does not leave through git. Add
     them to `.gitignore`, or commit the files you mean by hand.
   - git tools act on the project's own repo, or on the repo you launched
@@ -597,7 +597,7 @@ From the next turn, Jira tools are live.
 
 ```
 you > push my work
-sentinel > confirm  Commit & push 2 file(s) to origin/feature/july?
+ledgerhound > confirm  Commit & push 2 file(s) to origin/feature/july?
            message: Analysis: fraud rate baseline on July data
            files:
              analysis.py
@@ -620,7 +620,7 @@ sentinel > confirm  Commit & push 2 file(s) to origin/feature/july?
 
 ```
 you > post today's update to AUD-42
-sentinel > confirm  Post this comment to AUD-42?
+ledgerhound > confirm  Post this comment to AUD-42?
            ## Work update -- 2026-07-09
            - fraud rate is 4.9% [within_stratum]
            - ...
@@ -698,7 +698,7 @@ scripted playbook stack, not the shell).
 
 ## 8. Setting the judge model
 
-Benchmarks and evals (`sentinel/eval/`) use a second model as a **reference-guided judge** to grade the analyst's
+Benchmarks and evals (`ledgerhound/eval/`) use a second model as a **reference-guided judge** to grade the analyst's
 claims. The `/adversarial` deep-research loop (section 8b) also uses it, both
 as the adversary's own model and for the final verdict. If you don't
 configure one, the actor grades *itself* — that still runs, but it's not
@@ -710,31 +710,31 @@ no arguments to list what the judge's currently-resolved endpoint actually
 serves and pick one (same UX as `/model`); `/model-judge <id>` sets a model
 override directly without touching the rest of the judge config;
 `/model-judge configs/x.yaml` points the judge at a whole different provider.
-All of these persist to `.sentinel/config.yaml` (Option B below), so they
+All of these persist to `.ledgerhound/config.yaml` (Option B below), so they
 also apply outside the shell (benchmarks, `/adversarial`).
 
 **Option B — in the project config (persists):**
 
 ```yaml
-# .sentinel/config.yaml
+# .ledgerhound/config.yaml
 judge:
   config_ref: "configs/gateway.yaml"   # any LLM config
-  api_key_env: "SENTINEL_JUDGE_API_KEY"  # optional; else the yaml's own key
+  api_key_env: "LEDGERHOUND_JUDGE_API_KEY"  # optional; else the yaml's own key
 ```
 
 **Option C — environment variables (per-run override, wins over the config):**
 
 ```bash
-export SENTINEL_JUDGE_API_KEY="..."
-export SENTINEL_JUDGE_BASE_URL="https://api.moonshot.cn/v1"
-export SENTINEL_JUDGE_MODEL="kimi-k2.5"
+export LEDGERHOUND_JUDGE_API_KEY="..."
+export LEDGERHOUND_JUDGE_BASE_URL="https://api.moonshot.cn/v1"
+export LEDGERHOUND_JUDGE_MODEL="kimi-k2.5"
 ```
 
 **All three env vars are required together.** Setting only some of them
 logs a warning and falls through — it does not half-configure a judge.
 
 Resolution order is: **env vars → `judge.config_ref` → self-judge**. The
-scripts consult `./.sentinel/config.yaml` automatically when run from the
+scripts consult `./.ledgerhound/config.yaml` automatically when run from the
 repo root, so setting the judge with `/model-judge` and then running a
 benchmark just works. Check which one was used in the run's record:
 
@@ -791,7 +791,7 @@ count, not tool-call count). Results land in
 short list worth a human looking at, not all 25 cases' full transcripts.
 
 If no separate judge is configured (section 8), the adversary and the
-verdict both run on the actor's own model — Sentinel warns about this
+verdict both run on the actor's own model — Ledgerhound warns about this
 explicitly (self-judging your own fraud calls is weaker evidence than an
 independent model). `/model-judge` fixes it in one command.
 
@@ -799,8 +799,8 @@ independent model). `/model-judge` fixes it in one command.
 
 ## 9. Configuration reference
 
-Everything lives in one file per project: `.sentinel/config.yaml` (heavily
-commented). Secret *values* live in `.sentinel/secrets.env` (auto-gitignored);
+Everything lives in one file per project: `.ledgerhound/config.yaml` (heavily
+commented). Secret *values* live in `.ledgerhound/secrets.env` (auto-gitignored);
 the yaml only names which env var to read.
 
 Sections: `llm`, `jira`, `git`, `minio`, `trino`. You rarely touch this by hand
@@ -811,7 +811,7 @@ jira:
   base_url: "https://myorg.atlassian.net"
   email: "me@myorg.com"
   project_key: "AUD"
-  token_env: "SENTINEL_JIRA_TOKEN"   # value is in secrets.env
+  token_env: "LEDGERHOUND_JIRA_TOKEN"   # value is in secrets.env
   api_version: "3"                    # "3" = Cloud, "2" = Server
 git:
   remote: "origin"
@@ -835,7 +835,7 @@ likely to touch:
 | `kernel.cell_timeout_seconds` | how long one analysis step may run (default 1800) |
 | `tokenizers.local_dir` | a mounted folder of tokenizers instead of the object store |
 
-One worth knowing in kernel mode: `kernel.cell_timeout_seconds` (env `SENTINEL_CELL_TIMEOUT`,
+One worth knowing in kernel mode: `kernel.cell_timeout_seconds` (env `LEDGERHOUND_CELL_TIMEOUT`,
 default 1800) is how long one `run_python` cell may run before it is
 interrupted. Raise it if a single groupby on crore-scale data on the CPU
 fallback legitimately takes longer.
@@ -844,7 +844,7 @@ fallback legitimately takes longer.
 
 ## 10. CLI quick reference
 
-`sentinel shell` is the front door — everything below is the scripted /
+`ledgerhound shell` is the front door — everything below is the scripted /
 power-user surface the shell composes for you. Run any command with
 `--help` for its full options.
 
@@ -852,61 +852,61 @@ power-user surface the shell composes for you. Run any command with
 
 | Command | Does |
 |---|---|
-| `sentinel shell` | The conversational analyst. **Start here.** |
-| `sentinel shell --model <id>` | Pin a model, skipping discovery/selection. |
-| `sentinel shell --max-steps N --step-call-budget N --turn-budget-seconds N` | Raise the tool-call/wall-clock ceilings for a deliberately deep, cost-no-object exploration run (defaults: 400 / 60 / 14400s -- safety nets, not a pace-setter). |
-| `sentinel sessions collect` / `sentinel sessions report` | Pull + summarise session-quality logs collected from separately-installed Kubeflow instances (no shared filesystem needed) — see the module docstring in `sentinel/runtime/session_log.py`. |
-| `sentinel doctor` | Environment check: version, identity, keys, object store connection, tokenizer. |
+| `ledgerhound shell` | The conversational analyst. **Start here.** |
+| `ledgerhound shell --model <id>` | Pin a model, skipping discovery/selection. |
+| `ledgerhound shell --max-steps N --step-call-budget N --turn-budget-seconds N` | Raise the tool-call/wall-clock ceilings for a deliberately deep, cost-no-object exploration run (defaults: 400 / 60 / 14400s -- safety nets, not a pace-setter). |
+| `ledgerhound sessions collect` / `ledgerhound sessions report` | Pull + summarise session-quality logs collected from separately-installed Kubeflow instances (no shared filesystem needed) — see the module docstring in `ledgerhound/runtime/session_log.py`. |
+| `ledgerhound doctor` | Environment check: version, identity, keys, object store connection, tokenizer. |
 | `python scripts/prod_checks.py [gateway store kb tokenizer gpu adversarial]` | Deployment check on a pod: PASS/WARN/FAIL per check, JSON result saved. |
-| `sentinel profile <data>` | Profile a dataset — no LLM needed. |
-| `sentinel health` | Ping the configured LLM endpoint. |
-| `sentinel version` / `sentinel stats` / `sentinel whoami` | Install info, run/memory summary, current identity. |
+| `ledgerhound profile <data>` | Profile a dataset — no LLM needed. |
+| `ledgerhound health` | Ping the configured LLM endpoint. |
+| `ledgerhound version` / `ledgerhound stats` / `ledgerhound whoami` | Install info, run/memory summary, current identity. |
 
 ### Scripted analysis (no conversation)
 
 | Command | Does |
 |---|---|
-| `sentinel eda --digest <yaml>` | Agentic EDA with findings + notebook journal. |
-| `sentinel eda-multi` | Three-phase fraud × payee × merged-verdict playbook. |
-| `sentinel playbook` | The deterministic Fraud EDA Playbook. |
-| `sentinel auto run "<goal>" --data <file>` | Self-healing autonomous loop toward a natural-language goal. |
-| `sentinel scorecard` / `sentinel diff` | EDA scorecard for a run; compare two digests. |
+| `ledgerhound eda --digest <yaml>` | Agentic EDA with findings + notebook journal. |
+| `ledgerhound eda-multi` | Three-phase fraud × payee × merged-verdict playbook. |
+| `ledgerhound playbook` | The deterministic Fraud EDA Playbook. |
+| `ledgerhound auto run "<goal>" --data <file>` | Self-healing autonomous loop toward a natural-language goal. |
+| `ledgerhound scorecard` / `ledgerhound diff` | EDA scorecard for a run; compare two digests. |
 
 ### Fraud-domain tools
 
 | Command | Does |
 |---|---|
-| `sentinel signal` | Feature discriminative power + decay over time. |
-| `sentinel typology` | Cluster fraud typologies, track their evolution. |
-| `sentinel graph` | Account graphs + mule-detection EDA. |
-| `sentinel monitor` | Scheduled, self-investigating drift monitoring — see §9 below. |
+| `ledgerhound signal` | Feature discriminative power + decay over time. |
+| `ledgerhound typology` | Cluster fraud typologies, track their evolution. |
+| `ledgerhound graph` | Account graphs + mule-detection EDA. |
+| `ledgerhound monitor` | Scheduled, self-investigating drift monitoring — see §9 below. |
 
 ### Audit & reproducibility
 
 | Command | Does |
 |---|---|
-| `sentinel replay <run>` | Re-execute a recorded session against the same data — PASS/DIFF verdict. |
-| `sentinel run-views` | Regenerate `session_code.py` + `findings.jsonl` from a run's event log. |
-| `sentinel manifest` | Reproducibility manifest (hashes of code, data, packages) for a workspace. |
-| `sentinel eval` | Golden-dataset evaluation (groundedness via recomputation). |
+| `ledgerhound replay <run>` | Re-execute a recorded session against the same data — PASS/DIFF verdict. |
+| `ledgerhound run-views` | Regenerate `session_code.py` + `findings.jsonl` from a run's event log. |
+| `ledgerhound manifest` | Reproducibility manifest (hashes of code, data, packages) for a workspace. |
+| `ledgerhound eval` | Golden-dataset evaluation (groundedness via recomputation). |
 
 ### Workspace & memory
 
 | Command | Does |
 |---|---|
-| `sentinel project` / `sentinel workspace` | Create/inspect projects (`.sentinel/`) and workspaces. |
-| `sentinel start` | Start a new experiment or resume a previous session. |
-| `sentinel memory` / `sentinel knowledge` / `sentinel dictionary` | Dataset memory (HITL bootstrap), institutional knowledge store, schema KB. |
-| `sentinel upgrade` | Upgrade sentinel-ai from the internal wheel index (`$SENTINEL_INDEX_URL`). |
+| `ledgerhound project` / `ledgerhound workspace` | Create/inspect projects (`.ledgerhound/`) and workspaces. |
+| `ledgerhound start` | Start a new experiment or resume a previous session. |
+| `ledgerhound memory` / `ledgerhound knowledge` / `ledgerhound dictionary` | Dataset memory (HITL bootstrap), institutional knowledge store, schema KB. |
+| `ledgerhound upgrade` | Upgrade ledgerhound from the internal wheel index (`$LEDGERHOUND_INDEX_URL`). |
 
 ---
 
 ## 11. GPU acceleration (cuDF)
 
-Sentinel uses your GPU for **analysis** when three things are true:
+Ledgerhound uses your GPU for **analysis** when three things are true:
 
 1. **A GPU is actually available** and cuDF (RAPIDS) is installed.
-2. **Kernel mode is on** — `sentinel shell --use-kernel`. This is the
+2. **Kernel mode is on** — `ledgerhound shell --use-kernel`. This is the
    opt-in real-IPython-kernel mode (needs `jupyter_client` + `ipykernel`,
    i.e. `pip install -e ".[test]"`). The default in-process sandbox is
    pandas-only.
@@ -916,7 +916,7 @@ Sentinel uses your GPU for **analysis** when three things are true:
 
 ```bash
 pip install -e ".[test]"                       # kernel deps
-sentinel shell --use-kernel --llm-config configs/deepseek.yaml
+ledgerhound shell --use-kernel --llm-config configs/deepseek.yaml
 ```
 
 On startup the shell tells you which engine it actually got:
@@ -967,7 +967,7 @@ the same command works on a laptop and a GPU box.
 
 ## 12. Drift Monitor — scheduled, self-investigating drift detection
 
-`sentinel monitor` watches a dataset over time (signal decay + fraud
+`ledgerhound monitor` watches a dataset over time (signal decay + fraud
 typology evolution), alerts on WARNING/FAIL severity via webhook, and
 can optionally investigate what it found automatically instead of just
 paging a human.
@@ -975,14 +975,14 @@ paging a human.
 ### Quick start (files, on an interval)
 
 ```bash
-sentinel monitor init --dataset upi_fraud \
+ledgerhound monitor init --dataset upi_fraud \
   --fraud data/fraud.parquet --nonfr data/nonfr.parquet \
   --interval 3600 --webhook https://hooks.slack.com/services/...
 
-sentinel monitor run --once           # one cycle now (cron-friendly)
-sentinel monitor run                  # daemon loop, Ctrl+C to stop
-sentinel monitor status               # config + latest cycle
-sentinel monitor history              # past cycles
+ledgerhound monitor run --once           # one cycle now (cron-friendly)
+ledgerhound monitor run                  # daemon loop, Ctrl+C to stop
+ledgerhound monitor status               # config + latest cycle
+ledgerhound monitor history              # past cycles
 ```
 
 ### Choosing when it runs
@@ -993,7 +993,7 @@ Two modes, set at `init` time:
 - **Calendar**: `--days mon,thu --time 06:00 --timezone Asia/Kolkata` —
   specific days of the week at a specific time, in a specific timezone.
   Omitting `--days` keeps interval mode; passing it switches the config
-  to calendar mode. `sentinel monitor status` shows which mode is active
+  to calendar mode. `ledgerhound monitor status` shows which mode is active
   and the next-run description.
 
 ### Pulling data straight from Trino (no manual export step)
@@ -1001,7 +1001,7 @@ Two modes, set at `init` time:
 Instead of `--fraud`/`--nonfr` file paths, give the monitor SQL:
 
 ```bash
-sentinel monitor init --dataset upi_fraud \
+ledgerhound monitor init --dataset upi_fraud \
   --trino-fraud-sql "SELECT * FROM fraud_txns WHERE ..." \
   --trino-nonfr-sql "SELECT * FROM nonfraud_txns WHERE ..." \
   --trino-max-rows 2000000 \
@@ -1012,7 +1012,7 @@ sentinel monitor init --dataset upi_fraud \
 not optional:**
 
 ```bash
-sentinel monitor approve-sql --by "your.name"
+ledgerhound monitor approve-sql --by "your.name"
 ```
 
 This prints the exact SQL, asks you to confirm, then records a sha256
@@ -1021,7 +1021,7 @@ ever edited afterward, the monitor refuses to run until you approve
 again. A scheduled job has nobody present to click "yes" the way the
 interactive chat shell's Trino tools do, so this hash-pinned,
 approved-once model is how it stays safe unattended: connection
-credentials come from `SENTINEL_TRINO_*` environment variables (same as
+credentials come from `LEDGERHOUND_TRINO_*` environment variables (same as
 everywhere else Trino is used), and a hard row cap always applies
 regardless of what the approved SQL itself contains.
 
@@ -1035,10 +1035,10 @@ grounded, evidence-backed finding — landing in the same audit trail
 (hash-chained event log, replayable) as any human-driven session.
 
 ```bash
-sentinel monitor init --dataset upi_fraud --fraud f.parquet --nonfr n.parquet \
+ledgerhound monitor init --dataset upi_fraud --fraud f.parquet --nonfr n.parquet \
   --auto-investigate
 
-sentinel monitor run --once --llm-config configs/deepseek.yaml
+ledgerhound monitor run --once --llm-config configs/deepseek.yaml
 ```
 
 `--llm-config` is required whenever `auto_investigate` is on — the run
@@ -1060,16 +1060,16 @@ monitor with auto-investigation on.
 
 | Symptom | Fix |
 |---|---|
-| `env var is empty` on launch | The LLM key isn't set. Leave `llm.gateway.api_key` blank and run `sentinel shell` at a terminal to be asked once, or set it in `main_config.yaml` / `SENTINEL_GATEWAY_API_KEY`. |
-| `LLM config not found` | Run from the Sentinel checkout's install, or pass `--llm-config <yaml>`; the message lists where it looked. |
-| `main_config.yaml not found` | Copy `main_config.example.yaml` to `main_config.yaml` in the repo or the folder you launch from, or set `$SENTINEL_MAIN_CONFIG`. |
+| `env var is empty` on launch | The LLM key isn't set. Leave `llm.gateway.api_key` blank and run `ledgerhound shell` at a terminal to be asked once, or set it in `main_config.yaml` / `LEDGERHOUND_GATEWAY_API_KEY`. |
+| `LLM config not found` | Run from the Ledgerhound checkout's install, or pass `--llm-config <yaml>`; the message lists where it looked. |
+| `main_config.yaml not found` | Copy `main_config.example.yaml` to `main_config.yaml` in the repo or the folder you launch from, or set `$LEDGERHOUND_MAIN_CONFIG`. |
 | Jira tools "not available" | Jira is off. Give the agent your base URL + email + token; it switches on next turn. |
 | git tools missing | The project folder isn't a git repo. `git init` (or open the shell inside your repo). |
 | A write went through without asking | It shouldn't -- writes are always gated. Check you didn't run headless (`auto_yes`). |
 | Unicode errors on a legacy console | None expected -- the shell forces utf-8. If you see one, report it. |
 | `llm.method='...' is not one of self\|gateway\|api` | An old `main_config.yaml`. Set `method: gateway` and name its block `gateway:` (the org's gateway). |
 | `/adversarial` says a judge IS configured but could not be used | The judge block has no key (or a bad config). Fix it, or `/model-judge`; until then it self-judges. |
-| `context window: ... (ASSUMED ...)` | The model is unknown to Sentinel and the gateway did not report a window. Fine if it really is 256k; otherwise set a smaller one. |
+| `context window: ... (ASSUMED ...)` | The model is unknown to Ledgerhound and the gateway did not report a window. Fine if it really is 256k; otherwise set a smaller one. |
 | A kernel cell stops with `step exceeded ...s` | Raise `kernel.cell_timeout_seconds` in `main_config.yaml`. |
 | `tokenizer: estimated -- ... secret key is not set` | Run `/minio --key` in the shell. The tokenizer re-loads immediately. |
 | `/minio --key` says `the store REJECTED this secret -- NOT saved` | The store refused that secret. Check the value with whoever issued it; your previous key is still in place. |
@@ -1078,7 +1078,7 @@ monitor with auto-investigation on.
 | `/s3` says `not enough space` | The RAM disk (or cache folder) is too small for the data. Delete old datasets under it, or set `paths.data_cache_dir`. |
 | `upload FAILED -- files are kept locally` | The store was unreachable or refused the key. Files stay in `features_dir` and are retried after the next step; `/minio` checks the connection. |
 | `WRITE REDIRECTED` in a step's output | The code saved outside the workspace; the file is in `features_dir` under the name printed. Nothing to fix. |
-| `git_commit_push` says `REFUSED` | It found data or Sentinel output among your changes. Add them to `.gitignore`, or commit the files you mean by hand. |
+| `git_commit_push` says `REFUSED` | It found data or Ledgerhound output among your changes. Add them to `.gitignore`, or commit the files you mean by hand. |
 | Jira `HTTP 401` | Wrong token -- or a Server/Data Center Jira that wants `jira.auth: bearer` and `jira.api_version: "2"`. |
 | Jira `certificate verify failed` | Internal CA. Set `jira.verify_ssl: "false"` for this project. |
 
@@ -1090,14 +1090,14 @@ python scripts/prod_checks.py gateway tokenizer   # just these (gateway store kb
 ```
 
 Each check prints PASS / WARN / FAIL / SKIP with a reason, and the full
-result lands in `prod_checks_<timestamp>.json`. `sentinel doctor` is the
+result lands in `prod_checks_<timestamp>.json`. `ledgerhound doctor` is the
 quick version: config, keys, the object store connection and the tokenizer.
 
 ---
 
 ## 14. What 0.7.0 added — the inference gates
 
-Up to 0.6.0 Sentinel gated the **process**: the right grain, modelling only
+Up to 0.6.0 Ledgerhound gated the **process**: the right grain, modelling only
 once authorised, no silently re-running a finished chapter. Those checks stop
 you computing the wrong thing. They say nothing about whether the number you
 got supports the claim you are about to make.
@@ -1162,8 +1162,8 @@ that tells you anything.
 ### Two new evaluation commands
 
 ```sh
-sentinel eval null-data      # false-discovery rate under known ground truth
-sentinel eval blade          # external benchmark of analysis decisions
+ledgerhound eval null-data      # false-discovery rate under known ground truth
+ledgerhound eval blade          # external benchmark of analysis decisions
 ```
 
 `null-data` is the one to run. It generates data with **no signal by

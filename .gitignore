@@ -29,7 +29,7 @@ main_config.yaml
 *.swp
 *.swo
 
-# Sentinel outputs
+# Ledgerhound outputs
 outputs/
 run_outputs/
 digest.yaml
@@ -42,11 +42,11 @@ outputs/charts/
 *.xlsx
 data/
 # ...but these are SOURCE packages / packaged assets, not data folders -- keep tracked
-!sentinel/data/
-!sentinel/data/*.py
-!sentinel/dictionary/data/
-!sentinel/dictionary/data/*.csv
-!sentinel/dictionary/data/*.txt
+!ledgerhound/data/
+!ledgerhound/data/*.py
+!ledgerhound/dictionary/data/
+!ledgerhound/dictionary/data/*.csv
+!ledgerhound/dictionary/data/*.txt
 
 # OS
 .DS_Store
@@ -63,7 +63,10 @@ Thumbs.db
 # Claude Code session artifacts (worktrees, transcripts, agent state)
 .claude/
 
-# Sentinel workspace + per-machine profile
+# Ledgerhound workspace + per-machine profile
+.ledgerhound/
+ledgerhound_workspace/
+# pre-rename names (Sentinel), until migrated on first run
 .sentinel/
 sentinel_workspace/
 compute_profile.json
@@ -72,11 +75,11 @@ compute_profile.json
 .pytest_cache/
 .ipynb_checkpoints/
 
-# Local sentinel runs / scratch
-sentinel_ai.egg-info/
+# Local ledgerhound runs / scratch
+ledgerhound.egg-info/
 
 # Build stamp (generated at package time)
-sentinel/_build.py
+ledgerhound/_build.py
 paper/
 
 # V3-029: real internal package-index config -- holds a live access

@@ -10,7 +10,7 @@ import json
 import httpx
 import pytest
 
-from sentinel.llm.client import LLMClient, LLMConfig, _recover_tool_calls_from_text
+from ledgerhound.llm.client import LLMClient, LLMConfig, _recover_tool_calls_from_text
 
 # -- LLM client: text recovery -----------------------------------------------
 

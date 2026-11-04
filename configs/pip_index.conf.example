@@ -1,5 +1,5 @@
 # ════════════════════════════════════════════════════════════════
-# Sentinel — internal package index (the organization wheelhouse mirror), V3-029
+# Ledgerhound — internal package index (the organization wheelhouse mirror), V3-029
 # ════════════════════════════════════════════════════════════════
 # Template only -- contains NO real credentials. Copy this file to
 # `pip_index.conf` (same folder) and fill in the real URLs there.

@@ -3,9 +3,9 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sentinel-ai"
+name = "ledgerhound"
 version = "0.7.9"
-description = "Sentinel — Agentic EDA Engine for Fraud Modeling"
+description = "Ledgerhound — Agentic EDA Engine for Fraud Modeling"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -13,7 +13,7 @@ dependencies = [
     "typer[all]>=0.9.0",
     "rich>=13.0",
     "pandas>=2.0",
-    # Imported directly (sentinel/pipeline, backends, graph, ...) rather than
+    # Imported directly (ledgerhound/pipeline, backends, graph, ...) rather than
     # relied on transitively via pandas/scipy -- a direct import belongs in
     # the declared set so a resolver change cannot silently remove it.
     "numpy>=1.24",
@@ -33,10 +33,10 @@ dependencies = [
 
 [project.optional-dependencies]
 sql = ["sqlalchemy>=2.0"]
-# Exact token counting for compaction (sentinel.llm.tokenizer): tokenizers
+# Exact token counting for compaction (ledgerhound.llm.tokenizer): tokenizers
 # reads tokenizer.json (Qwen, DeepSeek, GLM, Gemma); tiktoken reads Kimi's.
 tokenizers = ["tokenizers>=0.20", "tiktoken>=0.7"]
-# Object-store data (`/s3 --path`, sentinel.io.data_source): boto3 is the
+# Object-store data (`/s3 --path`, ledgerhound.io.data_source): boto3 is the
 # team's S3 client and is preferred; without it the core `minio` package
 # is used (same S3 protocol, no parallel multipart transfers).
 s3 = ["boto3>=1.28"]
@@ -54,7 +54,7 @@ s3 = ["boto3>=1.28"]
 # automatically and pinning it here only risks a conflicting major.
 gpu = ["cudf-cu13", "cupy-cuda13x", "torch>=2.0"]        # CUDA 13 toolkit (the only one)
 gpu-cu13 = ["cudf-cu13", "cupy-cuda13x", "torch>=2.0"]   # explicit alias, same packages as `gpu`
-# Multi-GPU (SENTINEL_ENABLE_DASK_CUDF=1). dask-cuda has no -cu suffix --
+# Multi-GPU (LEDGERHOUND_ENABLE_DASK_CUDF=1). dask-cuda has no -cu suffix --
 # it is pure Python and picks up whichever RAPIDS build is present. Without
 # this the flag is inert: _dask_cudf_available() returns False and the
 # router silently keeps to a single GPU.
@@ -71,7 +71,7 @@ test = ["nbconvert>=7.0", "jupyter_client>=8.0", "ipykernel>=6.0"]
 # itself -- V3-029 is the org package-gate submission (pre-compiled wheels +
 # hashes reviewed and installed on the org's regulated server); it is closed
 # only when it works there, not when this group installs cleanly here.
-# shap/boruta: NOT required by the shipped path. sentinel.analysis.selection's
+# shap/boruta: NOT required by the shipped path. ledgerhound.analysis.selection's
 # default Boruta stage (shap_boruta_filter) computes real Tree SHAP values
 # natively via xgboost/lightgbm's own pred_contrib -- no shap/numba import,
 # so no native-DLL risk on a pip-only/no-sudo target. Kept installed here
@@ -87,18 +87,18 @@ wheelhouse = [
 ]
 
 [project.scripts]
-sentinel = "sentinel.cli.main:app"
+ledgerhound = "ledgerhound.cli.main:app"
 
 [tool.setuptools.packages.find]
-include = ["sentinel*"]
+include = ["ledgerhound*"]
 
 [tool.setuptools.package-data]
-sentinel = [
+ledgerhound = [
     "knowledge/defaults/*.yaml",
     "knowledge/defaults/*.json",
     "dictionary/data/*.csv",
     "dictionary/data/*.txt",
-    # Unified prompt tree (see sentinel/prompts/README.md): shell prompts,
+    # Unified prompt tree (see ledgerhound/prompts/README.md): shell prompts,
     # agentic specs, and skill procedures. These are DATA, not code -- they
     # must ship with the wheel or the analyst starts on its fallbacks.
     "prompts/*.md",

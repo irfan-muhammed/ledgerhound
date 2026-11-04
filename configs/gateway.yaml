@@ -1,4 +1,4 @@
-# Sentinel -- generic OpenAI-compatible gateway
+# Ledgerhound -- generic OpenAI-compatible gateway
 #
 # One config for ANY model behind an OpenAI-compatible gateway (vLLM,
 # LiteLLM, OpenRouter, a company proxy, ...) -- the gateway shape never
@@ -8,7 +8,7 @@
 # export for a normal setup.
 #
 # Usage:
-#   sentinel shell --llm-config configs/gateway.yaml   (or: /model configs/gateway.yaml)
+#   ledgerhound shell --llm-config configs/gateway.yaml   (or: /model configs/gateway.yaml)
 #
 # Equivalent curl (viewing available models):
 #   curl -X GET https://llm-gateway.example.com/v1/models \
@@ -42,6 +42,6 @@ llm:
   # server must be started with a tool-call parser matching the deployed
   # model (e.g. vLLM: --enable-auto-tool-choice --tool-call-parser
   # kimi_k2 for a Kimi-K2 model) so native tool tokens return as OpenAI
-  # `tool_calls`. If not, Sentinel recovers tool calls that arrive as
+  # `tool_calls`. If not, Ledgerhound recovers tool calls that arrive as
   # text, but a server that STRIPS the tokens still shows empty turns --
   # fix it server-side.

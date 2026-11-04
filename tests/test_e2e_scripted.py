@@ -12,8 +12,8 @@ import json
 
 import pytest
 
-from sentinel.analyst.hitl import HITLGate
-from sentinel.runtime.events import EventStream
+from ledgerhound.analyst.hitl import HITLGate
+from ledgerhound.runtime.events import EventStream
 from tests.conftest import ScriptedLLM, calls, reply, tool_call
 
 FIT = ("from sklearn.linear_model import LogisticRegression\n"
