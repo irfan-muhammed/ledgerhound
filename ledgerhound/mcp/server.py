@@ -15,6 +15,10 @@ rules need:
 
 `sql` is DuckDB only (Trino is deferred).
 
+Prompts: /fraud-eda, /feature-review, /sample-audit (ledgerhound.mcp.prompts).
+Resources: ledgerhound://dataset-card, ://findings, ://roles, ://certificate,
+://isolation.
+
 Rules enforced here, server-side, whichever agent calls:
 
 - Column roles must be confirmed (confirm_roles) before the steps that
@@ -475,6 +479,30 @@ def build_server(session: LedgerhoundSession):
         c = s.tools.certificate
         return json.dumps(c.to_dict() if c else {"certificate": "no sample built yet"},
                           indent=1, default=str)
+
+    @server.resource("ledgerhound://dataset-card", mime_type="application/json")
+    def dataset_card() -> str:
+        """What is known about the loaded data: identity, roles, answered and
+        open data questions, and the dataset card when a project keeps one."""
+        t = s.tools
+        if t._df is None:
+            return json.dumps({"dataset": "no data loaded"})
+        rm = t.roles
+        card = getattr(t, "_card", None)
+        doc = {"dataset": t._dataset_names()[:1], "data_sha256": getattr(t, "_data_sha256", ""),
+               "rows": int(len(t._df)), "columns": [str(c) for c in t._df.columns][:500],
+               "roles": rm.summary() if rm else "", "roles_confirmed_by":
+               (rm.confirmed_by if rm and rm.confirmed else "not confirmed"),
+               "answered": t._answered_questions(),
+               "open_questions": [{"key": q.key, "question": q.text}
+                                  for q in t._open_data_questions],
+               "card": (card.to_dict() if card is not None and hasattr(card, "to_dict")
+                        else None)}
+        return json.dumps(doc, indent=1, default=str)
+
+    from ledgerhound.mcp.prompts import PROMPTS
+    for pname, (fn, desc) in PROMPTS.items():
+        server.prompt(name=pname, description=desc)(fn)
 
     @server.resource("ledgerhound://isolation", mime_type="application/json")
     def isolation() -> str:
