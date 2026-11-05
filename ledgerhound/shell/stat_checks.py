@@ -96,7 +96,7 @@ TEST_ASSUMPTIONS: dict[str, dict] = {
     "shapiro": {
         "needs": ["n below a few thousand"],
         "note": ("Shapiro-Wilk rejects normality for essentially ANY real "
-                 "sample once n is large -- at UPI scale it will always say "
+                 "sample once n is large -- at payments scale it will always say "
                  "'not normal' and tells you nothing. Judge the size of the "
                  "departure, not its p-value."),
     },

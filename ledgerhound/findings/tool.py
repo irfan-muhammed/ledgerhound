@@ -332,7 +332,7 @@ FINDINGS_TOOL_SPECS: list[dict] = [
                         "description": (
                             "within_stratum: claim holds inside one stratum. "
                             "cross_stratum: claim mixes strata with weighting. "
-                            "population_estimate: extrapolated to UPI population "
+                            "population_estimate: extrapolated to the full population "
                             "(requires i.i.d. reservoir). "
                             "derived_sample: from an importance-sampled draw "
                             "(Phase 2). unspecified: no frame (discouraged)."

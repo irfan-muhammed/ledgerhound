@@ -577,6 +577,9 @@ class DataToolsMixin:
             known = self._answered_questions()
             qs = open_questions(self._df, set(known))
             self._open_data_questions = qs
+            if self._roles is not None and self._roles.confirmed:
+                self._close_role_questions(self._roles)     # roles already answer these
+                qs = self._open_data_questions
             self._questions_reminded = False
             if qs:
                 self._events.append("data_questions", keys=[q.key for q in qs])

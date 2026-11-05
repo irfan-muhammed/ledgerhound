@@ -190,6 +190,7 @@ class RolesToolsMixin:
                                    if a.role != "feature"},
                             absent=sorted(r for r in PERSON_ONLY if not cand.columns_with(r)))
         self._persist_roles()
+        closed = self._close_role_questions(cand)
         head = ("column roles CONFIRMED by the user" if by == "person" else
                 "column roles CONFIRMED as relayed by the agent -- no person was "
                 "verified to have checked them; the report will say so")
@@ -198,7 +199,24 @@ class RolesToolsMixin:
             tail = ("\nThere is no label-time column: label maturity cannot be "
                     "checked from the data, and build_sample will ask the user "
                     "for an assumed label lag.")
+        if closed:
+            tail += ("\nThese also answer the open data question(s): "
+                     f"{', '.join(closed)}.")
         return f"{head}: {cand.summary()}{tail}"
+
+    def _close_role_questions(self, rm) -> list[str]:
+        """The schema questions asked at load (data_questions) that confirmed
+        roles answer: which column is the label, the entity, the event time."""
+        from ledgerhound.roles import ENTITY_ROLES
+        answers = {"label": rm.first("label"), "event_time": rm.first("event_time"),
+                   "entity": next((c for r in ENTITY_ROLES for c in rm.columns_with(r)), "")}
+        open_qs = list(getattr(self, "_open_data_questions", []) or [])
+        closed = [q.key for q in open_qs if answers.get(q.key)]
+        if closed:
+            self._open_data_questions = [q for q in open_qs if q.key not in closed]
+            self._events.append("data_questions_answered_by_roles",
+                                keys=closed, answers={k: answers[k] for k in closed})
+        return closed
 
     def _roles_question(self, rm) -> str:
         from ledgerhound.roles import PERSON_ONLY

@@ -129,7 +129,7 @@ class ModelStory:
     label_grain: str = GRAIN_ACCOUNT
 
     # Fraud-side fetch
-    fetch_keys: list[str] = field(default_factory=list)   # e.g. ["payee_vpa", "ifsc"]
+    fetch_keys: list[str] = field(default_factory=list)   # e.g. ["payee_id"] or ["account_id"]
     lookback_months: int = 6
 
     # Labelling -- per typology; see LabelRule.
@@ -188,7 +188,7 @@ class ModelStory:
         if not self.fetch_keys:
             problems.append(
                 "fetch_keys is empty -- the fraud-side history fetch has no "
-                "join key (e.g. ['payee_vpa', 'ifsc'])"
+                "join key (e.g. ['payee_id'])"
             )
 
         if self.lookback_months <= 0:
