@@ -4,12 +4,12 @@ ledgerhound.shell.data_questions
 
 What must be ASKED about a dataset once it is profiled, instead of assumed.
 
-Real UPI extracts are full of things a model will otherwise guess: a
+Real transaction extracts are full of things a model will otherwise guess: a
 `fraud_flag` with four classes (which of them are fraud?), a second label
 (`is_mule`), a payer and a payee id (which entity is the analysis about?),
 two timestamps (which is the event time?), response / purpose / MCC codes
 whose values mean nothing without the business key, amounts that may be in
-paise. A wrong guess on any of these silently poisons everything after it.
+minor currency units (cents, paise). A wrong guess on any of these silently poisons everything after it.
 
 `open_questions()` turns the loaded frame's schema (plus the profiler's
 digest) into concrete questions. Answers are recorded on the dataset card
@@ -139,7 +139,7 @@ def open_questions(df, answered: set[str] | None = None) -> list[Question]:
             try:
                 import pandas as pd
                 if pd.api.types.is_numeric_dtype(df[c]):
-                    qs.append(Question(f"units:{c}", f"Is `{c}` in rupees or paise?"))
+                    qs.append(Question(f"units:{c}", f"Is `{c}` in the main currency unit or in minor units (cents, paise)? Which currency?"))
             except Exception:  # noqa: BLE001
                 pass
 

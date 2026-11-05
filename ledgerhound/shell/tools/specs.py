@@ -56,6 +56,7 @@ TOOL_SPECS: list[dict] = [
         "parameters": {"type": "object", "properties": {
             "claim": {"type": "string"},
             "evidence": {"type": "string"},
+            "kb_contradicts": {"type": "string", "description": "type/id of a Knowledge Pack entry this finding contradicts; the report flags it."},
             "sample_frame": {"type": "string",
                              "enum": ["within_stratum", "cross_stratum",
                                       "population_estimate", "unknown"]},
@@ -244,6 +245,48 @@ TOOL_SPECS: list[dict] = [
             "chapter": {"type": "string", "description": "Defaults to the currently open chapter if omitted."},
             "against_story": {"type": "string", "description": "A story_id (see /story or /library) to compare against. Defaults to the story immediately before the current one."}},
             "required": ["feature"]}}},
+    {"type": "function", "function": {
+        "name": "confirm_roles",
+        "description": "Confirm what each column IS (payer, payee, event_time, amount, label, label_time, rule_output, ...): guardrails key off these roles, not column names. Ledgerhound proposes roles on load; this asks the user to confirm them in one question. Correct a role with roles={column: role}; declare that the data has no label, label_time or label_source column with absent=[...]. label, label_time and label_source are always the user's call.",
+        "parameters": {"type": "object", "properties": {
+            "roles": {"type": "object", "description": "Corrections, {column: role}."},
+            "absent": {"type": "array", "items": {"type": "string"},
+                       "description": "Label roles the data does not have: label, label_time, label_source."}},
+            "required": []}}},
+    {"type": "function", "function": {
+        "name": "build_sample",
+        "description": "Build a train/test sample from the CONFIRMED column roles, with a construction certificate. Refuses until label lag and prevalence are settled: with no label-time column pass label_lag (days, 'final' or 'policy') -- the user confirms it and it is recorded as an assumption; pass design_prevalence (a fraction, or 'natural').",
+        "parameters": {"type": "object", "properties": {
+            "design_prevalence": {"type": "string"},
+            "label_lag": {"type": "string"},
+            "split": {"type": "string", "enum": ["", "temporal", "entity", "grouped_temporal"]},
+            "entity": {"type": "string"},
+            "time_unit": {"type": "string", "description": "for a numeric event time: seconds, minutes, hours, days, weeks or months"},
+            "test_fraction": {"type": "number"},
+            "embargo_days": {"type": "integer"}}}}},
+    {"type": "function", "function": {
+        "name": "sql",
+        "description": "Run ONE read-only DuckDB SELECT over the loaded data (table `df`) inside the analysis kernel and get the result table. Writes, COPY, ATTACH, file reads and settings are refused. Aggregate in SQL; results are capped at max_rows (default 50, at most 200).",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "A single SELECT over df."},
+            "max_rows": {"type": "integer"}},
+            "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "kb_search",
+        "description": "Search recorded findings (this session, earlier sessions on this dataset, team) and the Knowledge Pack (typologies, rules, dictionary, known findings, label policies, documents). Hits are quoted with their source; knowledge-pack text is unverified on this dataset until you check it on data.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "max_hits": {"type": "integer"}},
+            "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "kb_add",
+        "description": "Add to the Knowledge Pack: one structured entry (type typology, rule, dictionary, known_finding or label_policy) or one document (.md, .txt, .pdf path). Entries are validated strictly; a rule's output_column is then blocked as a feature, a label_policy sets label maturity. scope=team is shared with everyone and asks the user first.",
+        "parameters": {"type": "object", "properties": {
+            "entry": {"type": "object", "description": "A structured entry with a type field."},
+            "document": {"type": "string", "description": "Path to a .md/.txt/.pdf file."},
+            "scope": {"type": "string", "enum": ["project", "team"]},
+            "title": {"type": "string"}, "source": {"type": "string"}},
+            "required": []}}},
     {"type": "function", "function": {
         "name": "undo_last_transform",
         "description": "Restore the dataframe to its state before the last run_python call that changed it -- use this when a mutation (a filter, drop, etc.) turns out to be wrong. Only available for small/medium in-session (exec-mode) data; kernel-mode or very large data has no automatic undo copy -- use load_data to start over instead.",

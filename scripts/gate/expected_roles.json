@@ -1,0 +1,41 @@
+{
+  "_note": "Ground truth for the Phase 3 role check. Per dataset: column -> allowed roles. Columns not listed must be 'feature'. The first role listed is the preferred answer; later ones are accepted and reported as 'soft'.",
+  "paysim": {
+    "step": ["event_time"],
+    "type": ["channel"],
+    "amount": ["amount"],
+    "nameOrig": ["payer"],
+    "nameDest": ["payee"],
+    "isFraud": ["label"],
+    "isFlaggedFraud": ["rule_output"]
+  },
+  "ulb": {
+    "Time": ["event_time"],
+    "Amount": ["amount"],
+    "Class": ["label"]
+  },
+  "ieee": {
+    "TransactionID": ["transaction_id"],
+    "isFraud": ["label"],
+    "TransactionDT": ["event_time"],
+    "TransactionAmt": ["amount"],
+    "ProductCD": ["channel"],
+    "card1": ["card", "feature"],
+    "card2": ["feature", "card"],
+    "card3": ["feature", "card"],
+    "card5": ["feature", "card"],
+    "addr1": ["feature", "pii"],
+    "addr2": ["feature", "pii"],
+    "P_emaildomain": ["feature", "pii"],
+    "R_emaildomain": ["feature", "pii"]
+  },
+  "baf": {
+    "fraud_bool": ["label"],
+    "month": ["event_time"],
+    "payment_type": ["channel", "feature"],
+    "source": ["channel", "feature"],
+    "intended_balcon_amount": ["amount", "feature"],
+    "credit_risk_score": ["feature", "score"],
+    "device_os": ["feature", "channel"]
+  }
+}

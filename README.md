@@ -748,28 +748,68 @@ stats = client.execute_stats_only("""
 
 ---
 
-## Use it from an agent (MCP) — Phase 2
+## Use it from an agent (MCP) — Phases 2 and 3
 
 `ledgerhound mcp` serves the analyst over MCP stdio, so Claude Code, Codex,
 OpenCode or any MCP client can drive it. Install with `pip install
 'ledgerhound[mcp]'` (adds the MCP SDK, the Jupyter kernel and psutil).
 
-**Tools (8 of the planned 12):** `load_dataset`, `profile`, `run_analysis`,
-`check_feature`, `falsify`, `record_finding`, `kb_search` and `report`. Four
+**Tools (all 12 of the design):** `load_dataset`, `profile`,
+`confirm_roles`, `run_analysis`, `sql`, `check_feature`, `build_sample`,
+`falsify`, `record_finding`, `kb_search`, `kb_add` and `report`. Four
 workflow tools come with them, because the order rules need them:
 `set_goal`, `set_methodology`, `record_data_answer` and
-`request_modeling_authorisation`. Two resources are also served:
-`ledgerhound://findings` and `ledgerhound://isolation`.
+`request_modeling_authorisation`.
 
-**Phase 3:** `confirm_roles`, `sql`, `build_sample` and `kb_add`, plus the
-prompts (`/fraud-eda` and others) and the Knowledge Pack behind `kb_search`.
-Today `kb_search` is a keyword search over recorded findings.
+**Prompts:** `/fraud-eda`, `/feature-review` and `/sample-audit`, short
+workflows that name the tools in the order the server enforces.
+**Resources:** `ledgerhound://dataset-card`, `://findings`, `://roles`,
+`://certificate` and `://isolation`.
 
 **Rules the server enforces:**
-- `record_finding` refuses a claim that has not been through `falsify`.
+- **Column roles first.** Guardrails work on roles (payer, payee,
+  event_time, amount, label, label_time, rule_output, ...), not on column
+  names, so the same checks run on any fraud dataset. `confirm_roles` puts
+  the proposed roles to the person. `record_finding`, `build_sample`,
+  `check_feature`'s leakage check and the report refuse until the roles are
+  confirmed. Exploring with `run_analysis` is allowed before that, and the
+  report counts those cells as "roles unconfirmed". `label`, `label_time`
+  and `label_source` are never settled automatically.
+- `record_finding` refuses a claim that has not been through `falsify`, and
+  a restatement of a known finding unless `delta` says what it adds.
 - `report` refuses while no finding is recorded.
+- `sql` is read-only: one `SELECT` over `df`, checked by DuckDB's parser
+  and run on a locked connection with no file or network access.
+- `build_sample` refuses until **label lag** and **prevalence** are settled.
+  With a label-time column, the lag is measured. Without one, the person
+  states an assumed lag, or that labels are final, and the construction
+  certificate records it as an **assumption, not a check**.
 - Analysis code runs only in the analysis kernel. There is no fallback to
   in-process exec.
+
+**Knowledge Pack.** `ledgerhound kb init|add|list|search|validate`, or
+`kb_add` over MCP. It holds typologies, rules, a data dictionary, known
+findings, label policies and documents, in three scopes (built-in → team →
+project). It feeds the guardrails: rule output columns are refused as
+features, dictionary roles are proposed in `confirm_roles`, known findings
+join the restatement check, and label policies inform `build_sample`.
+`kb_search` uses BM25; set `LEDGERHOUND_KB_EMBEDDINGS=1` with
+`ledgerhound[embeddings]` installed for hybrid search. In a report, findings
+are tagged *verified on data*. Text taken from the pack is not, and a
+finding can be flagged as contradicting a pack entry (`kb_contradicts`).
+
+**Phase 3 gate: four public datasets, no schema code.** `scripts/gate/`
+runs PaySim, ULB credit card, IEEE-CIS and BAF through the MCP server with
+nothing dataset-specific except the person's answers (`answers.json`):
+1. `fetch_samples.sh` downloads with your own Kaggle token into
+   `~/lh-data`, outside the repo.
+2. `check_roles.py` scores role inference.
+3. `run_gate.py` runs the full flow.
+
+None of the four has a label-time column, so **the gate passes on the
+label-lag assumption route** (labels stated final). Every certificate
+records label maturity as assumed. `standins.py` gives a dry run on
+synthetic data with the same columns.
 
 **Isolation (ADR 0001, `docs/adr/0001-kernel-isolation.md`).** The guarantee
 is narrow: *the analysis kernel cannot open network connections.* It does

@@ -34,9 +34,11 @@ needs_bwrap = pytest.mark.skipif(not iso.bwrap_works(), reason="bubblewrap unava
 PHASE2 = {"load_dataset", "profile", "run_analysis", "check_feature", "falsify",
           "record_finding", "kb_search", "report", "set_goal", "set_methodology",
           "record_data_answer", "request_modeling_authorisation"}
-PHASE3 = {"confirm_roles", "sql", "build_sample", "kb_add"}
+TOOLS = PHASE2 | {"confirm_roles", "kb_add", "sql", "build_sample"}
+NOT_YET: set = set()
 CLAIM = "fraud transactions carry far larger amounts than legitimate ones"
 AUTH_Q = "request_modeling_authorisation"
+ROLES_YES = "yes, these roles are right"
 
 
 @pytest.fixture
@@ -65,6 +67,13 @@ async def call(client, name, **args) -> str:
     return text(await client.call_tool(name, args))
 
 
+async def confirm_roles(client, **args) -> str:
+    """The agent relays the user's yes (no elicitation on this client)."""
+    r = await call(client, "confirm_roles", confirm=ROLES_YES, **args)
+    assert "CONFIRMED" in r, r
+    return r
+
+
 def choose(answer_for):
     """An elicitation callback: a person picking `answer_for(options)`."""
     async def cb(context, params):
@@ -78,10 +87,10 @@ def choose(answer_for):
 
 # -- the surface ------------------------------------------------------------ #
 
-async def test_exactly_the_phase2_tools(session):
+async def test_exactly_the_current_tools(session):
     async with Client(build_server(session)) as c:
         names = {t.name for t in (await c.list_tools()).tools}
-    assert names == PHASE2 and not names & PHASE3
+    assert names == TOOLS and not names & NOT_YET
 
 
 async def test_tool_schemas_fit_the_token_budget(session):
@@ -97,7 +106,7 @@ async def test_resources_are_listed(session):
     async with Client(build_server(session)) as c:
         uris = {str(r.uri) for r in (await c.list_resources()).resources}
         iso_doc = json.loads((await c.read_resource("ledgerhound://isolation")).contents[0].text)
-    assert {"ledgerhound://findings", "ledgerhound://isolation"} <= uris
+    assert {"ledgerhound://findings", "ledgerhound://isolation", "ledgerhound://roles"} <= uris
     assert iso_doc == {"level": "no kernel running"}
 
 
@@ -113,6 +122,7 @@ async def test_nothing_works_before_load(session):
 async def test_record_finding_requires_falsify_first(session, fraud_csv):
     async with Client(build_server(session)) as c:
         await call(c, "load_dataset", path=str(fraud_csv))
+        await confirm_roles(c)
         r = await call(c, "record_finding", claim=CLAIM, sample_frame="population_estimate")
         assert r.startswith("REFUSED") and "falsify" in r
         assert not session.recorded_findings()
@@ -134,12 +144,15 @@ async def test_empty_check_feature_is_refused(session):
 async def test_kb_search_finds_recorded_findings(session, fraud_csv):
     async with Client(build_server(session)) as c:
         await call(c, "load_dataset", path=str(fraud_csv))
-        miss = await call(c, "kb_search", query="larger amounts")
-        assert miss.startswith("no recorded finding") and "Phase 3" in miss
+        before = await call(c, "kb_search", query="larger amounts legitimate")
+        assert "this session" not in before
+        await confirm_roles(c)
         await call(c, "falsify", claim=CLAIM)
         await call(c, "record_finding", claim=CLAIM, sample_frame="population_estimate")
         hit = await call(c, "kb_search", query="larger amounts legitimate")
-        assert "this session" in hit and "larger amounts" in hit
+        assert "[finding · this session] (from data)" in hit and "larger amounts" in hit
+        # the finding outranks knowledge-pack text that merely says "amounts"
+        assert hit.index("this session") < hit.index("unverified)") if "unverified)" in hit else True
         assert "a query" in await call(c, "kb_search", query="the and of")
 
 
@@ -151,6 +164,7 @@ async def test_full_flow_sandboxed(session, fraud_csv):
         loaded = await call(c, "load_dataset", path=str(fraud_csv))
         assert "isolation: sandboxed" in loaded
         assert "rows:" in (await call(c, "profile")).lower()
+        await confirm_roles(c)
         assert "goal" in (await call(c, "set_goal", objective="find fraud drivers",
                                      unit_of_analysis="transaction",
                                      label_column="is_fraud")).lower()
@@ -174,7 +188,9 @@ async def test_full_flow_sandboxed(session, fraud_csv):
         found = json.loads((await c.read_resource("ledgerhound://findings")).contents[0].text)
         level = json.loads((await c.read_resource("ledgerhound://isolation")).contents[0].text)["level"]
     assert CLAIM in report and "isolation: sandboxed" in report
-    assert "approved by the agent" not in report
+    # the only agent-relayed decision is the roles confirmation
+    assert "Column roles confirmed by **the agent, not verified by a person**" in report
+    assert report.count(" -> ") == 1
     assert len(found) == 1 and level == "sandboxed"
 
 
@@ -183,6 +199,7 @@ async def test_partial_isolation_is_reported_and_warned(monkeypatch, session, fr
     async with Client(build_server(session)) as c:
         loaded = await call(c, "load_dataset", path=str(fraud_csv))
         assert "isolation: partial" in loaded and "network open" in loaded
+        await confirm_roles(c)
         await call(c, "falsify", claim=CLAIM)
         await call(c, "record_finding", claim=CLAIM, sample_frame="population_estimate")
         saved = await call(c, "report", title="t", markdown="m")
@@ -226,6 +243,7 @@ async def test_no_elicitation_relays_and_flags_the_agent(session, fraud_csv):
         assert session.tools.goal.modeling_authorised is False
         second = await call(c, AUTH_Q, summary="features ready", confirm="authorise modelling")
         assert "relayed by the agent" in second
+        await confirm_roles(c)
         await call(c, "falsify", claim=CLAIM)
         await call(c, "record_finding", claim=CLAIM, sample_frame="population_estimate")
         saved = await call(c, "report", title="t", markdown="m")
@@ -390,7 +408,7 @@ def test_stdout_carries_only_protocol(label, cmd, tmp_path, fraud_csv):
     # Server-side prints really happened -- on stderr, not nowhere.
     assert "Kernel ready" not in out_text and "Kernel ready" in err
     names = {t["name"] for t in got[2]["result"]["tools"]}
-    assert names == PHASE2
+    assert names == TOOLS
     assert "cell print" in json.dumps(got[4]["result"])
     assert "rows:" in json.dumps(got[5]["result"]).lower()
     assert "Compute Strategy" not in out_text and "Compute Strategy" in err
@@ -423,7 +441,7 @@ def test_sdk_stdio_client_end_to_end(tmp_path, fraud_csv):
                                              str(tmp_path / "runs")],
                                        cwd=str(tmp_path), env=dict(os.environ))
         async with Client(params) as c:
-            assert {t.name for t in (await c.list_tools()).tools} == PHASE2
+            assert {t.name for t in (await c.list_tools()).tools} == TOOLS
             assert (await call(c, "load_dataset", path=str(fraud_csv))).startswith("loaded")
             return await call(c, "run_analysis",
                               code="print(df.groupby('is_fraud').amount.mean().round(1).to_dict())")
@@ -433,8 +451,9 @@ def test_sdk_stdio_client_end_to_end(tmp_path, fraud_csv):
 async def test_broader_claim_than_the_falsified_one_is_refused(session, fraud_csv):
     async with Client(build_server(session)) as c:
         await call(c, "load_dataset", path=str(fraud_csv))
+        await confirm_roles(c)
         await call(c, "falsify", claim=CLAIM)
-        broader = (CLAIM + ", because night-time device changes and new payees "
+        broader =(CLAIM + ", because night-time device changes and new payees "
                    "drive mule cash-out velocity")
         r = await call(c, "record_finding", claim=broader, sample_frame="unknown")
     assert r.startswith("REFUSED"), r
@@ -482,6 +501,11 @@ async def test_declined_elicitation_is_not_claimed_as_a_person(mode, session, fr
         await call(c, "load_dataset", path=str(fraud_csv))
         r = await call(c, AUTH_Q, summary="features ready")
         assert "NOT authorised" in r
+        # A declining client cannot confirm roles either: settle them the
+        # way an earlier session would have, outside this client.
+        roles_r = await call(c, "confirm_roles")
+        assert "NOT confirmed" in roles_r
+        session.tools.roles.settle("person")
         await call(c, "falsify", claim=CLAIM)
         await call(c, "record_finding", claim=CLAIM, sample_frame="population_estimate")
         saved = await call(c, "report", title="t", markdown="m")
@@ -512,3 +536,133 @@ async def test_kernel_helpers_load_and_are_reported_present(session, fraud_csv):
     assert "HAVE True" in r
     assert "helpers (evaluate_feature/check_leakage) failed to load" not in loaded
     assert "unavailable" not in loaded
+
+
+# -- column roles (Phase 3 step 1) ------------------------------------------ #
+
+async def test_role_dependent_steps_refuse_until_roles_are_confirmed(session, fraud_csv):
+    async with Client(build_server(session)) as c:
+        loaded = await call(c, "load_dataset", path=str(fraud_csv))
+        assert "column roles (proposed, NOT confirmed)" in loaded
+        assert "is_fraud=label" in loaded
+        # exploring is allowed
+        assert "550.0" in await call(c, "run_analysis",
+                                     code="print(df.groupby('is_fraud').amount.mean().round(1).to_dict())")
+        feat = await call(c, "check_feature", features=["amount"], label="is_fraud")
+        assert '"strength"' in feat and "column roles are not confirmed" in feat
+        await call(c, "falsify", claim=CLAIM)
+        r = await call(c, "record_finding", claim=CLAIM, sample_frame="population_estimate")
+        assert r.startswith("REFUSED") and "confirm_roles" in r
+        assert not session.recorded_findings()
+        first = await call(c, "confirm_roles")
+        assert first.startswith("NEEDS USER DECISION")
+        assert "is_fraud -> label" in first and "label_time -> not in the data" in first
+        assert not session.tools.roles_confirmed
+        await confirm_roles(c)
+        assert (await call(c, "record_finding", claim=CLAIM,
+                           sample_frame="population_estimate")).startswith("recorded finding")
+        saved = await call(c, "report", title="t", markdown="m")
+    report = Path(re.search(r"-> (\S+)", saved).group(1)).read_text(encoding="utf-8")
+    assert "Column roles confirmed by **the agent, not verified by a person**" in report
+    # run_analysis and check_feature each ran a kernel cell before confirmation
+    assert "2 analysis cell(s) ran before the column roles were confirmed" in report
+    assert "label maturity is an assumption, not a check" in report
+
+
+@MODES
+async def test_roles_confirmed_by_a_person_through_elicitation(mode, session, fraud_csv):
+    def person(opts):
+        if "yes, these roles are right" in opts:
+            return "yes, these roles are right"
+        return next((o for o in opts if o.startswith("no methodology")), opts[-1])
+    async with Client(build_server(session), mode=mode,
+                      elicitation_callback=choose(person)) as c:
+        await call(c, "load_dataset", path=str(fraud_csv))
+        r = await call(c, "confirm_roles")
+        doc = json.loads((await c.read_resource("ledgerhound://roles")).contents[0].text)
+    assert "CONFIRMED by the user" in r
+    assert doc["confirmed_by"] == "person"
+    assert doc["columns"]["is_fraud"] == {"role": "label", "confidence": "high",
+                                          "reason": doc["columns"]["is_fraud"]["reason"],
+                                          "status": "person"}
+    assert doc["absent"]["label_time"] == "person"
+
+
+async def test_label_roles_never_settle_without_asking(session, fraud_csv):
+    async with Client(build_server(session)) as c:
+        await call(c, "load_dataset", path=str(fraud_csv))
+        rm = session.tools.roles
+    assert rm.columns["is_fraud"].status == "proposed"
+    assert rm.columns["amount"].status == "auto"
+    assert not rm.confirmed
+
+
+async def test_check_feature_refuses_label_and_wrong_label_once_confirmed(session, fraud_csv):
+    async with Client(build_server(session)) as c:
+        await call(c, "load_dataset", path=str(fraud_csv))
+        await confirm_roles(c)
+        r = await call(c, "check_feature", features=["is_fraud"], label="is_fraud")
+        assert r.startswith("REFUSED") and "role label" in r
+        r = await call(c, "check_feature", features=["amount"], label="hour")
+        assert r.startswith("REFUSED") and "not the confirmed label" in r
+        ok = await call(c, "check_feature", features=["amount"], label="is_fraud")
+        assert '"leakage"' in ok and "not confirmed" not in ok
+
+
+async def test_role_corrections_are_asked_again(session, fraud_csv):
+    async with Client(build_server(session)) as c:
+        await call(c, "load_dataset", path=str(fraud_csv))
+        await confirm_roles(c)
+        bad = await call(c, "confirm_roles", roles={"hour": "nonsense"})
+        assert "is not a role" in bad and session.tools.roles_confirmed
+        again = await call(c, "confirm_roles", roles={"hour": "event_time"})
+        assert again.startswith("NEEDS USER DECISION") and "hour -> event_time" in again
+        # until the person confirms the correction, the confirmed map stands
+        assert session.tools.roles_confirmed and session.tools.roles.role_of("hour") == "feature"
+        await confirm_roles(c, roles={"hour": "event_time"})
+    assert session.tools.roles.role_of("hour") == "event_time"
+
+
+async def test_confirmed_roles_carry_to_the_next_session(tmp_path, fraud_csv):
+    s1 = LedgerhoundSession(tmp_path / "runs1")
+    try:
+        async with Client(build_server(s1)) as c:
+            await call(c, "load_dataset", path=str(fraud_csv))
+            await confirm_roles(c)
+    finally:
+        s1.tools.close()
+    s2 = LedgerhoundSession(tmp_path / "runs2")
+    try:
+        async with Client(build_server(s2)) as c:
+            loaded = await call(c, "load_dataset", path=str(fraud_csv))
+            assert "confirmed in an earlier session by the agent (unverified)" in loaded
+            assert s2.tools.roles_confirmed
+    finally:
+        s2.tools.close()
+
+
+# -- the Knowledge Pack (Phase 3 step 2) ------------------------------------ #
+
+async def test_kb_add_validates_and_scopes(session, tmp_path, monkeypatch):
+    monkeypatch.setenv("LEDGERHOUND_TEAM_KB_DIR", str(tmp_path / "team"))
+    rule = {"type": "rule", "name": "new payee burst", "logic": "3+ payments to a new payee in 1h",
+            "output_column": "rule_hit_9"}
+    async with Client(build_server(session)) as c:
+        bad = await call(c, "kb_add", entry={"type": "rule", "name": "x"})
+        assert bad.startswith("REFUSED") and "logic" in bad
+        assert "exactly one of" in await call(c, "kb_add")
+        ok = await call(c, "kb_add", entry=rule)
+        assert ok.startswith("added rule new_payee_burst in the project pack")
+        team = await call(c, "kb_add", entry=rule, scope="team")
+        assert team.startswith("NEEDS USER DECISION") and "TEAM knowledge pack" in team
+        assert not (tmp_path / "team" / "entries.jsonl").exists()
+        team = await call(c, "kb_add", entry=rule, scope="team", confirm="add to the team pack")
+        assert "in the team pack" in team
+        doc = tmp_path / "typology_note.md"
+        doc.write_text("Mule accounts receive from many payers and pay out within hours.")
+        added = await call(c, "kb_add", document=str(doc), source="internal note")
+        assert added.startswith("added document")
+    from ledgerhound.kb import KnowledgePack
+    line = json.loads((tmp_path / "team" / "entries.jsonl").read_text().splitlines()[0])
+    assert line["added_by"] == "agent, team add approved by agent"
+    assert KnowledgePack().get("rule", "new_payee_burst").scope == "project"

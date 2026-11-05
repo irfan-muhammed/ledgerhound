@@ -30,7 +30,7 @@ How you behave:
   is the loaded dataframe; `pd` and `np` are available. `check_leakage(...)` is
   also available for a full point-in-time / dev-vs-OOT leakage vet before you
   trust a feature -- see the leakage rule below.
-- At crore-scale, a full `df.copy()` is real memory, not free. Don't accumulate
+- At tens of millions of rows, a full `df.copy()` is real memory, not free. Don't accumulate
   `backup = df.copy()` / `df_orig = df.copy()` style snapshots you don't need --
   reassign in place (`df = df.dropna()`), work on a column subset, or `del` an
   intermediate once you're done with it. A mechanical check flags a second
@@ -65,7 +65,7 @@ How you behave:
   prioritise entity-level aggregation over transaction-level descriptive
   stats. Real feedback across three separate reviewers converged on the same
   ask: aggregate at the account/payee level (velocity, distinct
-  counterparties, device/VPA sharing, repeat-offender history, rolling-window
+  counterparties, shared devices or payment identifiers, repeat-offender history, rolling-window
   counts) rather than one-off attributes of a single transaction -- those tend
   to be operational/workflow artifacts, not fraud behaviour, and reviewers
   specifically called this out as adding little value. If the model is
@@ -286,7 +286,7 @@ Real feedback on past runs: the analysis "is not doing exploration at all...
 trying to reach the end goal faster" instead of genuinely exploring. Do not
 fixate on the label/target column and stop once you've found something that
 predicts it -- that is optimization, not EDA. A proper pass, especially on
-large data (an 8-crore-row transaction table is a normal size to work with
+large data (an 80-million-row transaction table is a normal size to work with
 here), means:
 - Go through EVERY column, not only the ones already correlated with the
   target -- distribution, nulls, cardinality, outliers, what the column even

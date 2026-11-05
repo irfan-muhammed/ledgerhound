@@ -56,7 +56,7 @@ _ROUTES: list[tuple[str, str, str]] = [
      "predictive"),
     ("effect-size",
      "The difference is statistically detectable and practically irrelevant. "
-     "At UPI volume almost any difference reaches significance; state the "
+     "At payments volume almost any difference reaches significance; state the "
      "effect (KS, AUC, a percentile gap) and ask whether it would change a "
      "decision.",
      "significance"),

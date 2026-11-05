@@ -61,6 +61,10 @@ gpu-cu13 = ["cudf-cu13", "cupy-cuda13x", "torch>=2.0"]   # explicit alias, same 
 multigpu-cu13 = ["dask-cudf-cu13", "dask-cuda"]
 local = ["torch>=2.0", "transformers>=4.40", "bitsandbytes>=0.43", "accelerate>=0.28"]
 dev = ["pytest>=7.0", "ruff>=0.1"]
+# Knowledge Pack PDF documents (Markdown and text need nothing extra).
+docs = ["pypdf>=4.0"]
+# Hybrid kb_search (opt in with LEDGERHOUND_KB_EMBEDDINGS=1; BM25 needs nothing).
+embeddings = ["sentence-transformers>=3.0"]
 # The MCP server (`ledgerhound mcp`) and the sandboxed analysis kernel it
 # requires (ADR 0001). psutil backs the memory cap where no cgroup exists.
 mcp = ["mcp>=2.3,<3", "jupyter_client>=8.0", "ipykernel>=6.0", "psutil>=5.9"]
@@ -98,6 +102,8 @@ include = ["ledgerhound*"]
 [tool.setuptools.package-data]
 ledgerhound = [
     "knowledge/defaults/*.yaml",
+    # Built-in Knowledge Pack (typologies, label-maturity defaults).
+    "kb/builtin/*.yaml",
     "knowledge/defaults/*.json",
     "dictionary/data/*.csv",
     "dictionary/data/*.txt",

@@ -289,6 +289,8 @@ class AnalystToolsBase:
         success = sig is None
         if success and name not in _PLAN_META_TOOLS:
             self._evidence_count += 1
+        if success and name == "run_python":
+            self._note_cell_ran()       # counted "roles unconfirmed" in the report
         if sig is not None:
             key = (name, _norm_args_for_failure(args), sig)
             count = self._failure_log.get(key, 0) + 1

@@ -150,6 +150,11 @@ class DataToolsMixin:
                     f"sample; compute exact figures with run_python.)")
         if kernel_note:
             msg += f"\n{kernel_note}"
+        try:
+            msg += "\n" + self._init_roles()
+        except Exception as e:  # noqa: BLE001 -- role inference never blocks a load
+            self._roles = None
+            self._events.append("roles_error", error=f"{type(e).__name__}: {e}"[:300])
         # Recognise the dataset from its column names alone and PROPOSE the
         # goal immediately. The 2026-08-06 run had to rediscover "this is an
         # account-level mule problem" over hours, then shipped the wrong
@@ -572,6 +577,9 @@ class DataToolsMixin:
             known = self._answered_questions()
             qs = open_questions(self._df, set(known))
             self._open_data_questions = qs
+            if self._roles is not None and self._roles.confirmed:
+                self._close_role_questions(self._roles)     # roles already answer these
+                qs = self._open_data_questions
             self._questions_reminded = False
             if qs:
                 self._events.append("data_questions", keys=[q.key for q in qs])

@@ -1,0 +1,9 @@
+{
+  "_note": "What the person answers when Ledgerhound asks, per gate dataset. This is the ONLY per-dataset input to run_gate.py: no schema code. Roles come from expected_roles.json (the preferred role per listed column, everything else feature). None of the four has a label-time column, so all four take the label-lag assumption route; public, static datasets have final labels.",
+  "paysim": {"time_unit": "hours", "label_lag": "final", "design_prevalence": "0.05",
+             "not_a_feature": "isFlaggedFraud"},
+  "ulb": {"time_unit": "seconds", "label_lag": "final", "design_prevalence": "0.05"},
+  "ieee": {"time_unit": "seconds", "label_lag": "final", "design_prevalence": "natural",
+           "not_a_feature": "TransactionID"},
+  "baf": {"time_unit": "months", "label_lag": "final", "design_prevalence": "0.05"}
+}
