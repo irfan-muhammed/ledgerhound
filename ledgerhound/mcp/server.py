@@ -89,19 +89,30 @@ class LedgerhoundSession:
         import anyio
         if self._lock is None:
             self._lock = anyio.Lock()
-        answered = _person_answer(ctx)
+        reply = _person_reply(ctx)       # (answer, action) on an input_required retry
+        answered = reply[0] if reply else None
         async with self._lock:
+            if reply is not None:
+                # What the client reported, verbatim, so a "cancel" from a
+                # client that could not show the form is never mistaken for
+                # a person's decision.
+                self.tools._log("hitl", tier="client_reply", name=name,
+                                action=reply[1], answer=answered or "")
             self.gate.pending = None
+            route: dict = {}
             self.gate.elicit = (_preset(answered) if answered is not None
-                                else _elicitor(ctx, self))
+                                else _elicitor(ctx, route))
             self.gate.agent_answer = confirm
             try:
                 result = await anyio.to_thread.run_sync(self.tools._run_tool, name, args)
             finally:
                 self.gate.elicit = None
                 self.gate.agent_answer = None
-            if (may_ask and answered is None and self.gate.pending is not None
-                    and confirm is None and _client_elicits(ctx)):
+            # input_required only where it is the protocol's way to ask: a
+            # 2026-07-28 connection (no back-channel). On a handshake-era
+            # connection it is not a valid result.
+            if (may_ask and reply is None and self.gate.pending is not None
+                    and confirm is None and route.get("no_back_channel")):
                 question, options = self.gate.pending
                 self.tools._log("hitl", tier="pending", name=name, approved=False,
                                 answer="", approved_by="asking person via client",
@@ -207,18 +218,39 @@ def _input_required(question: str, options: list):
                                   request_state=_DECISION_KEY)
 
 
-def _person_answer(ctx) -> Optional[str]:
-    """The person's answer on an input_required retry: the choice, "" for
-    decline/cancel, None when this is not such a retry."""
+def _answer_for(action: str, choice) -> Optional[str]:
+    """Map an elicitation result to RelayGate's elicit() contract.
+
+    accept  -> the choice (a person chose it);
+    decline -> ""   (a person explicitly said no: the safe last option);
+    cancel  -> None (nobody chose -- dismissed, or a client that cannot show
+               forms, e.g. `claude -p`). Not a person's decision: the
+               question goes back to the agent relay instead.
+    """
+    if action == "accept":
+        return str(choice or "")
+    if action == "decline":
+        return ""
+    return None
+
+
+def _person_reply(ctx) -> Optional[tuple]:
+    """(answer, action) on an input_required retry -- answer as _answer_for
+    -- or None when this is not such a retry."""
     if ctx is None or getattr(ctx, "request_state", None) != _DECISION_KEY:
         return None      # only an answer to a question THIS server asked
     responses = getattr(ctx, "input_responses", None)
     res = (responses or {}).get(_DECISION_KEY)
     if res is None:
         return None
-    if getattr(res, "action", "") == "accept":
-        return str((getattr(res, "content", None) or {}).get("choice", ""))
-    return ""
+    action = str(getattr(res, "action", "") or "")
+    choice = (getattr(res, "content", None) or {}).get("choice")
+    return _answer_for(action, choice), action
+
+
+def _person_answer(ctx) -> Optional[str]:
+    reply = _person_reply(ctx)
+    return reply[0] if reply else None
 
 
 def _preset(answer: str):
@@ -228,7 +260,7 @@ def _preset(answer: str):
     return elicit
 
 
-def _elicitor(ctx, session=None):
+def _elicitor(ctx, route: Optional[dict] = None):
     """A sync elicit(question, options) for RelayGate, bound to this request;
     None when the client did not declare elicitation."""
     if not _client_elicits(ctx):
@@ -239,13 +271,16 @@ def _elicitor(ctx, session=None):
         try:
             res = anyio.from_thread.run(ctx.elicit, question, _decision_model(options))
         except Exception as e:  # noqa: BLE001 -- no back-channel, client error
-            if type(e).__name__ != "NoBackChannelError":
+            if type(e).__name__ == "NoBackChannelError":
+                if route is not None:
+                    route["no_back_channel"] = True
+            else:
                 _stderr(f"[ledgerhound] elicitation failed ({type(e).__name__}: {e}); "
                         "relaying the question through the agent")
             return None
-        if getattr(res, "action", "") == "accept":
-            return str(res.data.choice)
-        return ""
+        action = getattr(res, "action", "")
+        data = getattr(res, "data", None)
+        return _answer_for(action, getattr(data, "choice", None))
     return elicit
 
 

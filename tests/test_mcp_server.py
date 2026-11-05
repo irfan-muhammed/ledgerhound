@@ -23,6 +23,7 @@ pytest.importorskip("jupyter_client")
 
 from mcp import Client, StdioServerParameters  # noqa: E402
 from mcp import types as mt  # noqa: E402
+from mcp.shared.exceptions import MCPError  # noqa: E402
 
 from ledgerhound.mcp.server import LedgerhoundSession, build_server  # noqa: E402
 from ledgerhound.runtime import isolation as iso  # noqa: E402
@@ -276,12 +277,18 @@ async def test_elicitation_error_never_authorises(mode, session, fraud_csv):
         return mt.ErrorData(code=-32603, message="client cannot show forms right now")
     async with Client(build_server(session), mode=mode, elicitation_callback=broken) as c:
         await call(c, "load_dataset", path=str(fraud_csv))
-        try:
+        if mode == "legacy":
+            # The server sees the failed elicit and relays to the agent.
             r = await call(c, AUTH_Q, summary="features ready")
-        except Exception as e:  # noqa: BLE001 -- a client may surface the failed round as an error
-            r = f"client error: {e}"
+            assert r.startswith("NEEDS USER DECISION"), r
+        else:
+            # 2026-07-28: the CLIENT's form failed, so the client fails the
+            # call and never retries -- no answer ever reaches the server.
+            with pytest.raises(MCPError, match="cannot show forms"):
+                await call(c, AUTH_Q, summary="features ready")
     assert session.tools.goal.modeling_authorised is False
-    assert "AUTHORISED" not in r
+    assert not [d for d in session.gate.log
+                if d.level == "choose" and d.approved_by == "person"]
 
 
 async def test_confirm_wins_over_input_required(session, fraud_csv):
@@ -445,3 +452,55 @@ def test_unsolicited_input_responses_are_ignored():
     no = mt.ElicitResult(action="decline")
     assert _person_answer(SimpleNamespace(request_state=_DECISION_KEY,
                                           input_responses={_DECISION_KEY: no})) == ""
+
+
+@MODES
+async def test_cancelled_elicitation_is_not_a_persons_decision(mode, session, fraud_csv):
+    # `claude -p` and other clients that cannot show a form reply "cancel".
+    # Nobody chose: not authorised, not recorded as a person, and the agent
+    # is handed the question to relay.
+    async def cancel(context, params):
+        return mt.ElicitResult(action="cancel")
+    async with Client(build_server(session), mode=mode, elicitation_callback=cancel) as c:
+        await call(c, "load_dataset", path=str(fraud_csv))
+        r = await call(c, AUTH_Q, summary="features ready")
+        assert r.startswith("NEEDS USER DECISION"), r
+        assert session.tools.goal.modeling_authorised is False
+        assert not [d for d in session.gate.log
+                    if d.level == "choose" and d.approved_by == "person"]
+        r2 = await call(c, AUTH_Q, summary="features ready", confirm="authorise modelling")
+    assert "relayed by the agent" in r2
+    assert [d.approved_by for d in session.tools.agent_approvals()] == ["agent"]
+
+
+@MODES
+async def test_declined_elicitation_is_the_persons_no(mode, session, fraud_csv):
+    async with Client(build_server(session), mode=mode,
+                      elicitation_callback=choose(lambda opts: None)) as c:
+        await call(c, "load_dataset", path=str(fraud_csv))
+        await call(c, AUTH_Q, summary="features ready")
+    choices = [d for d in session.gate.log if d.level == "choose"]
+    assert choices and choices[-1].approved_by == "person"
+    if mode == "auto":
+        replies = _events(session, "hitl")
+        assert any(e.get("tier") == "client_reply" and e.get("action") == "decline"
+                   for e in replies)
+
+
+def test_answer_mapping():
+    from ledgerhound.mcp.server import _answer_for
+    assert _answer_for("accept", "authorise modelling") == "authorise modelling"
+    assert _answer_for("decline", None) == ""
+    assert _answer_for("cancel", None) is None
+    assert _answer_for("", None) is None
+
+
+async def test_kernel_helpers_load_and_are_reported_present(session, fraud_csv):
+    async with Client(build_server(session)) as c:
+        loaded = await call(c, "load_dataset", path=str(fraud_csv))
+        r = await call(c, "run_analysis", code=(
+            "print('HAVE', all(n in globals() for n in "
+            "('check_leakage', 'evaluate_feature', 'evaluate_features')))"))
+    assert "HAVE True" in r
+    assert "helpers (evaluate_feature/check_leakage) failed to load" not in loaded
+    assert "unavailable" not in loaded
