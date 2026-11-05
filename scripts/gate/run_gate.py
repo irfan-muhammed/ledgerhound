@@ -23,6 +23,7 @@ Exit code 1 if any dataset fails.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import sys
@@ -139,18 +140,32 @@ def render(results: list[dict]) -> str:
     return "\n".join(out) + "\n"
 
 
-def isolate(root: Path) -> None:
+@contextlib.contextmanager
+def isolate(root: Path):
     """Every gate run starts from nothing: its own role store (so roles a
     previous run confirmed are not silently reused) and empty project/team
     Knowledge Packs (so the user's packs do not steer the result). Nothing
-    is written to the user's library."""
+    is written to the user's library, and everything is restored on exit, so
+    an in-process caller (the test suite) is left exactly as it was."""
     import os
 
     import ledgerhound.paths as paths
+    saved_lib = paths.library_dir
+    keys = ("LEDGERHOUND_KB_DIR", "LEDGERHOUND_TEAM_KB_DIR")
+    saved_env = {k: os.environ.get(k) for k in keys}
     lib = root / "library"
     paths.library_dir = lambda: lib
     os.environ["LEDGERHOUND_KB_DIR"] = str(root / "kb-project")
     os.environ["LEDGERHOUND_TEAM_KB_DIR"] = str(root / "kb-team")
+    try:
+        yield
+    finally:
+        paths.library_dir = saved_lib
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def main(argv: list[str]) -> int:
@@ -166,17 +181,17 @@ def main(argv: list[str]) -> int:
     expected = json.loads((HERE / "expected_roles.json").read_text(encoding="utf-8"))
     answers = json.loads((HERE / "answers.json").read_text(encoding="utf-8"))
     out_root = Path(tempfile.mkdtemp(prefix="lh-gate-"))
-    isolate(out_root)
     results = []
-    for name in DATASETS:
-        if only and name not in only:
-            continue
-        p = data / "samples" / f"{name}.parquet"
-        if not p.exists():
-            print(f"[{name}] no sample at {p}; run scripts/gate/fetch_samples.sh {name}")
-            continue
-        print(f"[{name}] running ...", flush=True)
-        results.append(anyio.run(run_one, name, p, expected[name], answers[name], out_root))
+    with isolate(out_root):
+        for name in DATASETS:
+            if only and name not in only:
+                continue
+            p = data / "samples" / f"{name}.parquet"
+            if not p.exists():
+                print(f"[{name}] no sample at {p}; run scripts/gate/fetch_samples.sh {name}")
+                continue
+            print(f"[{name}] running ...", flush=True)
+            results.append(anyio.run(run_one, name, p, expected[name], answers[name], out_root))
     text = render(results)
     print(text)
     if md_out:

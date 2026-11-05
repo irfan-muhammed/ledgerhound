@@ -41,10 +41,18 @@ def test_the_gate_names_no_columns():
 
 
 def test_all_four_pass_on_standins(gate, tmp_path):
+    import os
+
+    import ledgerhound.paths as paths
     run_gate, standins = gate
     standins.write(tmp_path, n=1500)
     md = tmp_path / "gate.md"
+    lib_before = paths.library_dir
+    env_before = {k: os.environ.get(k) for k in ("LEDGERHOUND_KB_DIR", "LEDGERHOUND_TEAM_KB_DIR")}
     code = run_gate.main([str(tmp_path), "--md", str(md)])
+    # the gate isolates itself and then puts the process back exactly as it was
+    assert paths.library_dir is lib_before
+    assert {k: os.environ.get(k) for k in env_before} == env_before
     text = md.read_text(encoding="utf-8")
     assert code == 0, text
     for name in ("paysim", "ulb", "ieee", "baf"):
