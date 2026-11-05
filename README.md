@@ -812,8 +812,23 @@ codex mcp add ledgerhound -- ledgerhound mcp --out-root ~/ledgerhound-runs
 From Windows with Ledgerhound installed in WSL, use the command `wsl.exe` with
 the arguments `-d Ubuntu -- /path/to/venv/bin/ledgerhound mcp ...`.
 
-Clients run headless (`claude -p`, `opencode run`) must close stdin
+Clients run headless (`claude -p`, `opencode run`, `codex exec`) must close stdin
 (`< /dev/null`), or they wait for piped input.
+
+**Codex specifics.**
+- Codex asks before every MCP tool call. A headless run with approval
+  `never` refuses each one. To pre-approve Ledgerhound's tools only, add
+  `default_tools_approval_mode = "approve"` under `[mcp_servers.ledgerhound]`.
+  Ledgerhound still gates modelling authorisation itself.
+- In that mode Codex declines every elicitation form without showing it.
+  Ledgerhound records these as *declined via client*, never as a person's
+  decision, so the agent cannot authorise modelling this way.
+- On a ChatGPT login, pick a model from `codex debug models` with `-m`. The
+  default model may not be available on your plan.
+
+Checked on 2026-11-05: Claude Code (from Windows via `wsl.exe`), OpenCode
+1.19 and Codex 0.166 each completed the fraud flow end to end, from load
+through profile, analysis, falsify, finding and authorisation to report.
 
 ---
 
