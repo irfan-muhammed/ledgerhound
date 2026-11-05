@@ -294,7 +294,7 @@ def build_sample(df, roles, lag: LabelLag, *, design_prevalence=None, split: str
     # down-sample legitimate TRAIN rows to the design prevalence; test keeps its rate
     n_dropped = 0
     tr_rate = float((train["_label"] == 1).mean()) if len(train) else 0.0
-    if len(train) and dp > tr_rate > 0:
+    if len(train) and dp > tr_rate > 0 and dp_how == "declared":   # 'natural' never resamples
         fraud = train[train["_label"] == 1]
         legit = train[train["_label"] == 0]
         keep = min(len(legit), int(round(len(fraud) * (1 - dp) / dp)))
