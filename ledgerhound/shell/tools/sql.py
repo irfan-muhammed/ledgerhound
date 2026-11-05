@@ -19,8 +19,15 @@ Trino is deferred (Phase 3 decision).
 
 from __future__ import annotations
 
+import re
+
 MAX_ROWS = 200
 ALLOWED = ("SELECT", "EXPLAIN")
+# The statement type alone is not enough: DuckDB 1.x types `PRAGMA x` as a
+# SELECT (2.x types it PRAGMA). So the first keyword must also be a reading one.
+READ_KEYWORDS = ("select", "with", "explain", "describe", "show", "summarize", "from",
+                 "values", "table", "(")
+_LEADING_COMMENTS = re.compile(r"^(\s*(--[^\n]*\n|/\*.*?\*/))*\s*", re.DOTALL)
 
 _CELL = '''\
 import duckdb as _lh_ddb
@@ -62,6 +69,10 @@ def check_read_only(query: str) -> tuple[str, str]:
         return q, (f"REFUSED: sql runs one statement per call; this has {len(stmts)}. "
                    "Nothing was run.")
     kind = str(stmts[0].type).rsplit(".", 1)[-1]
+    head = _LEADING_COMMENTS.sub("", q, count=1).lower()
+    first = "(" if head.startswith("(") else (re.match(r"[a-z_]+", head) or [""])[0]
+    if kind in ALLOWED and first not in READ_KEYWORDS:
+        kind = first.upper() or kind
     if kind not in ALLOWED:
         return q, (f"REFUSED: sql is read-only; {kind} statements are not allowed. "
                    "Only SELECT (and EXPLAIN) over the loaded data, which is the table "
