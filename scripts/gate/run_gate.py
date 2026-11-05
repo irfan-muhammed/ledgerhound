@@ -139,6 +139,20 @@ def render(results: list[dict]) -> str:
     return "\n".join(out) + "\n"
 
 
+def isolate(root: Path) -> None:
+    """Every gate run starts from nothing: its own role store (so roles a
+    previous run confirmed are not silently reused) and empty project/team
+    Knowledge Packs (so the user's packs do not steer the result). Nothing
+    is written to the user's library."""
+    import os
+
+    import ledgerhound.paths as paths
+    lib = root / "library"
+    paths.library_dir = lambda: lib
+    os.environ["LEDGERHOUND_KB_DIR"] = str(root / "kb-project")
+    os.environ["LEDGERHOUND_TEAM_KB_DIR"] = str(root / "kb-team")
+
+
 def main(argv: list[str]) -> int:
     import anyio
     md_out, only = None, None
@@ -152,6 +166,7 @@ def main(argv: list[str]) -> int:
     expected = json.loads((HERE / "expected_roles.json").read_text(encoding="utf-8"))
     answers = json.loads((HERE / "answers.json").read_text(encoding="utf-8"))
     out_root = Path(tempfile.mkdtemp(prefix="lh-gate-"))
+    isolate(out_root)
     results = []
     for name in DATASETS:
         if only and name not in only:
