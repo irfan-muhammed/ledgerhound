@@ -6,14 +6,15 @@ The MCP front door: the analyst tool layer (`AnalystTools`) behind the Python
 MCP SDK, so Claude Code, Codex or any MCP client drives it. The host agent is
 the brain; this server supplies the data, the rules and the record.
 
-Exposes 10 of the design's 12 tools, plus the 4 workflow tools that the order
+Exposes 11 of the design's 12 tools, plus the 4 workflow tools that the order
 rules need:
 
-    load_dataset  profile  confirm_roles  run_analysis  check_feature
+    load_dataset  profile  confirm_roles  run_analysis  sql  check_feature
     falsify  record_finding  kb_search  kb_add  report
     set_goal  set_methodology  record_data_answer  request_modeling_authorisation
 
-`sql` and `build_sample` arrive later in Phase 3.
+`build_sample` arrives later in Phase 3. `sql` is DuckDB only (Trino is
+deferred).
 
 Rules enforced here, server-side, whichever agent calls:
 
@@ -285,6 +286,13 @@ def build_server(session: LedgerhoundSession):
         request_modeling_authorisation, output at the wrong grain, and tests
         whose assumptions fail. print() what you need to see."""
         return await s.call(ctx, "run_python", {"code": code})
+
+    @server.tool()
+    async def sql(query: str, ctx: Context, max_rows: int = 50) -> str:
+        """One read-only DuckDB SELECT over the loaded data (table `df`), run
+        in the sandboxed kernel. Writes, COPY, ATTACH, file reads and settings
+        are refused. Aggregate in SQL; at most 200 rows come back."""
+        return await s.call(ctx, "sql", {"query": query, "max_rows": max_rows})
 
     @server.tool()
     async def check_feature(features: list[str], label: str, ctx: Context) -> str:

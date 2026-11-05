@@ -254,6 +254,13 @@ TOOL_SPECS: list[dict] = [
                        "description": "Label roles the data does not have: label, label_time, label_source."}},
             "required": []}}},
     {"type": "function", "function": {
+        "name": "sql",
+        "description": "Run ONE read-only DuckDB SELECT over the loaded data (table `df`) inside the analysis kernel and get the result table. Writes, COPY, ATTACH, file reads and settings are refused. Aggregate in SQL; results are capped at max_rows (default 50, at most 200).",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "A single SELECT over df."},
+            "max_rows": {"type": "integer"}},
+            "required": ["query"]}}},
+    {"type": "function", "function": {
         "name": "kb_search",
         "description": "Search recorded findings (this session, earlier sessions on this dataset, team) and the Knowledge Pack (typologies, rules, dictionary, known findings, label policies, documents). Hits are quoted with their source; knowledge-pack text is unverified on this dataset until you check it on data.",
         "parameters": {"type": "object", "properties": {
