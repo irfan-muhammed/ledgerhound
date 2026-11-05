@@ -253,6 +253,15 @@ TOOL_SPECS: list[dict] = [
                        "description": "Label roles the data does not have: label, label_time, label_source."}},
             "required": []}}},
     {"type": "function", "function": {
+        "name": "kb_add",
+        "description": "Add to the Knowledge Pack: one structured entry (type typology, rule, dictionary, known_finding or label_policy) or one document (.md, .txt, .pdf path). Entries are validated strictly; a rule's output_column is then blocked as a feature, a label_policy sets label maturity. scope=team is shared with everyone and asks the user first.",
+        "parameters": {"type": "object", "properties": {
+            "entry": {"type": "object", "description": "A structured entry with a type field."},
+            "document": {"type": "string", "description": "Path to a .md/.txt/.pdf file."},
+            "scope": {"type": "string", "enum": ["project", "team"]},
+            "title": {"type": "string"}, "source": {"type": "string"}},
+            "required": []}}},
+    {"type": "function", "function": {
         "name": "undo_last_transform",
         "description": "Restore the dataframe to its state before the last run_python call that changed it -- use this when a mutation (a filter, drop, etc.) turns out to be wrong. Only available for small/medium in-session (exec-mode) data; kernel-mode or very large data has no automatic undo copy -- use load_data to start over instead.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},

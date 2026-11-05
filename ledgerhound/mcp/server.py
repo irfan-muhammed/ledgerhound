@@ -6,15 +6,14 @@ The MCP front door: the analyst tool layer (`AnalystTools`) behind the Python
 MCP SDK, so Claude Code, Codex or any MCP client drives it. The host agent is
 the brain; this server supplies the data, the rules and the record.
 
-Exposes 9 of the design's 12 tools, plus the 4 workflow tools that the order
+Exposes 10 of the design's 12 tools, plus the 4 workflow tools that the order
 rules need:
 
     load_dataset  profile  confirm_roles  run_analysis  check_feature
-    falsify  record_finding  kb_search  report
+    falsify  record_finding  kb_search  kb_add  report
     set_goal  set_methodology  record_data_answer  request_modeling_authorisation
 
-`sql`, `build_sample` and `kb_add` arrive later in Phase 3, with the
-Knowledge Pack.
+`sql` and `build_sample` arrive later in Phase 3.
 
 Rules enforced here, server-side, whichever agent calls:
 
@@ -79,6 +78,7 @@ class LedgerhoundSession:
             out_root=out_root, renderer=_stderr, gate=self.gate,
             use_kernel=True, exec_fallback=False, isolation=policy)
         self.tools.require_confirmed_roles = True
+        self.tools.kb_actor = "agent"
         self._falsified: list[tuple[str, set]] = []
         self._lock = None
 
@@ -452,6 +452,18 @@ def build_server(session: LedgerhoundSession):
     def findings() -> str:
         """Every finding recorded in this session."""
         return json.dumps(s.recorded_findings(), default=str, indent=1)
+
+    @server.tool()
+    async def kb_add(ctx: Context, entry: Optional[dict] = None, document: str = "",
+                     scope: Literal["project", "team"] = "project", title: str = "",
+                     source: str = "", confirm: Optional[str] = None) -> Union[str, InputRequiredResult]:
+        """Add one Knowledge Pack entry (type typology | rule | dictionary |
+        known_finding | label_policy) or one document (.md/.txt/.pdf path).
+        Refuses entries that fail validation. scope=team asks the user; if the
+        result says NEEDS USER DECISION, ask and retry with confirm=."""
+        args = {k: v for k, v in (("entry", entry), ("document", document), ("scope", scope),
+                                  ("title", title), ("source", source)) if v}
+        return await s.call(ctx, "kb_add", args, confirm=confirm, may_ask=True)
 
     @server.resource("ledgerhound://roles", mime_type="application/json")
     def column_roles() -> str:

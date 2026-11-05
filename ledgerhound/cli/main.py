@@ -3182,6 +3182,11 @@ knowledge_app = typer.Typer(
 )
 app.add_typer(knowledge_app, name="knowledge")
 
+# `ledgerhound kb` -- the Knowledge Pack (Phase 3)
+from ledgerhound.kb.cli import kb_app  # noqa: E402
+
+app.add_typer(kb_app, name="kb")
+
 _K_TYPE_COLORS = {
     "quality_flag":    "red",
     "drift_event":     "yellow",

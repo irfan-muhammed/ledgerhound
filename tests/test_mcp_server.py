@@ -34,8 +34,8 @@ needs_bwrap = pytest.mark.skipif(not iso.bwrap_works(), reason="bubblewrap unava
 PHASE2 = {"load_dataset", "profile", "run_analysis", "check_feature", "falsify",
           "record_finding", "kb_search", "report", "set_goal", "set_methodology",
           "record_data_answer", "request_modeling_authorisation"}
-TOOLS = PHASE2 | {"confirm_roles"}
-NOT_YET = {"sql", "build_sample", "kb_add"}
+TOOLS = PHASE2 | {"confirm_roles", "kb_add"}
+NOT_YET = {"sql", "build_sample"}
 CLAIM = "fraud transactions carry far larger amounts than legitimate ones"
 AUTH_Q = "request_modeling_authorisation"
 ROLES_YES = "yes, these roles are right"
@@ -637,3 +637,30 @@ async def test_confirmed_roles_carry_to_the_next_session(tmp_path, fraud_csv):
             assert s2.tools.roles_confirmed
     finally:
         s2.tools.close()
+
+
+# -- the Knowledge Pack (Phase 3 step 2) ------------------------------------ #
+
+async def test_kb_add_validates_and_scopes(session, tmp_path, monkeypatch):
+    monkeypatch.setenv("LEDGERHOUND_TEAM_KB_DIR", str(tmp_path / "team"))
+    rule = {"type": "rule", "name": "new payee burst", "logic": "3+ payments to a new payee in 1h",
+            "output_column": "rule_hit_9"}
+    async with Client(build_server(session)) as c:
+        bad = await call(c, "kb_add", entry={"type": "rule", "name": "x"})
+        assert bad.startswith("REFUSED") and "logic" in bad
+        assert "exactly one of" in await call(c, "kb_add")
+        ok = await call(c, "kb_add", entry=rule)
+        assert ok.startswith("added rule new_payee_burst in the project pack")
+        team = await call(c, "kb_add", entry=rule, scope="team")
+        assert team.startswith("NEEDS USER DECISION") and "TEAM knowledge pack" in team
+        assert not (tmp_path / "team" / "entries.jsonl").exists()
+        team = await call(c, "kb_add", entry=rule, scope="team", confirm="add to the team pack")
+        assert "in the team pack" in team
+        doc = tmp_path / "typology_note.md"
+        doc.write_text("Mule accounts receive from many payers and pay out within hours.")
+        added = await call(c, "kb_add", document=str(doc), source="internal note")
+        assert added.startswith("added document")
+    from ledgerhound.kb import KnowledgePack
+    line = json.loads((tmp_path / "team" / "entries.jsonl").read_text().splitlines()[0])
+    assert line["added_by"] == "agent, team add approved by agent"
+    assert KnowledgePack().get("rule", "new_payee_burst").scope == "project"

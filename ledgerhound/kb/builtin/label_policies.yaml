@@ -1,0 +1,24 @@
+# Built-in label-maturity defaults (design doc, "Knowledge Pack"). They are
+# conservative starting points, not facts about your institution: set your
+# own with a label_policy entry of the same label_source in your team or
+# project pack. The label-maturity guard reports which policy it used.
+
+- type: label_policy
+  label_source: chargeback
+  maturity_days: 90
+  notes: >-
+    Default. Card disputes can be raised for months after the transaction,
+    so recent "non-fraud" transactions are partly undiscovered fraud.
+    Replace with your scheme's and your institution's actual windows.
+
+- type: label_policy
+  label_source: complaint
+  maturity_days: 30
+  notes: Default for customer-reported fraud and scams. Replace with your own figure.
+
+- type: label_policy
+  label_source: any
+  maturity_days: 90
+  notes: >-
+    Used when the label source is unknown or mixed. The guard states that it
+    used this fallback.

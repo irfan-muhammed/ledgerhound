@@ -1,0 +1,110 @@
+# Built-in typologies for the v1.0 transaction-fraud scope (design doc,
+# "Fraud and AML scope"). These describe patterns in general terms; they are
+# starting points to test against your data, not evidence about it. Override
+# any entry with your own (same type and id) in your team or project pack.
+
+- type: typology
+  id: card_not_present
+  name: Card-not-present fraud
+  description: >-
+    Stolen card details used for remote purchases (online, phone, in-app),
+    often preceded by small "card testing" authorisations.
+  rails: [card]
+  signals:
+    - a burst of small or declined authorisations on one card shortly before a larger one
+    - first use of the card from a new device, address or IP
+    - billing and shipping details that do not match the card's history
+    - many cards used from one device or address in a short window
+  roles_needed: [card, event_time, amount, device, merchant]
+  falsification:
+    - check the effect holds within merchant category, not only across categories
+    - check it survives on a later time period than the one it was found on
+    - restate it at card level as well as transaction level
+
+- type: typology
+  id: account_takeover
+  name: Account takeover
+  description: >-
+    A fraudster gains control of a genuine customer's account, changes its
+    contact or security details, then moves money out.
+  rails: [card, real_time_payments, ach, wire, wallet]
+  signals:
+    - a login or session from a new device shortly before a payment
+    - a change of phone, email or password shortly before a payout
+    - a new payee added and paid within the same session or day
+    - payment amounts or times far outside the account's own history
+  roles_needed: [account, device, event_time, amount, payee]
+  falsification:
+    - compare against genuine device changes (new phone) that were not fraud
+    - check the signal is not driven by one channel's prevalence
+
+- type: typology
+  id: app_scam
+  name: Authorised push payment (APP) and social-engineering scam
+  description: >-
+    The genuine customer is manipulated into sending the payment themselves
+    (impersonation, investment, romance, purchase scams), so the payer's
+    credentials and device look normal.
+  rails: [real_time_payments, wire, ach, wallet]
+  signals:
+    - a first payment to a new payee with a high amount
+    - a first-time or rarely used device or channel for this customer
+    - several payments to the same new payee in quick succession
+    - the payee account is new or receives from many unrelated payers
+  roles_needed: [payer, payee, amount, event_time]
+  falsification:
+    - check the payer-side signal is not just "new payee", which is common in genuine use
+    - restate at payer level; a few heavy victims can dominate transaction counts
+    - "check the labels, since scam reports arrive late and are often under-reported"
+
+- type: typology
+  id: first_party_fraud
+  name: First-party fraud
+  description: >-
+    The account holder defrauds the institution themselves: false disputes
+    on delivered goods ("friendly fraud"), or building credit and then
+    maxing it out with no intent to repay ("bust-out").
+  rails: [card, wallet, ach]
+  signals:
+    - disputes raised on transactions with normal device and delivery history
+    - a rapid increase in spend or limit usage after a quiet build-up period
+    - repeated disputes by the same account across merchants
+  roles_needed: [account, amount, event_time, label_source]
+  falsification:
+    - check label_source; dispute-based labels mix genuine fraud and first-party claims
+    - check the pattern against accounts that later paid normally
+
+- type: typology
+  id: merchant_collusion
+  name: Merchant collusion and merchant fraud
+  description: >-
+    A merchant takes part in the fraud: processing stolen cards, refund
+    abuse, or laundering transactions through a front business.
+  rails: [card, real_time_payments, wallet]
+  signals:
+    - many distinct cards or payers with high fraud rates at one merchant
+    - refunds to cards or accounts other than the original payer
+    - transaction amounts clustered just under review or reporting thresholds
+    - sales volume out of line with the merchant's category or history
+  roles_needed: [merchant, card, payer, amount, event_time]
+  falsification:
+    - restate at merchant level; a merchant with few transactions can look extreme by chance
+    - check against merchants of the same category and size
+
+- type: typology
+  id: mule_account
+  name: Money mule account
+  description: >-
+    An account that receives proceeds of fraud and passes them on quickly,
+    either knowingly or as a recruited mule.
+  rails: [real_time_payments, ach, wire, wallet]
+  signals:
+    - money in from many unrelated payers, then out to few payees or cash-out
+    - funds leave soon after they arrive (pass-through)
+    - a new or long-dormant account that suddenly becomes active
+    - incoming amounts that are just under round numbers or limits
+  roles_needed: [payer, payee, account, amount, event_time]
+  falsification:
+    - restate at account level; mule labels are account-level, transactions are not
+    - check against genuine high-turnover accounts (small businesses, payroll)
+    - check timing; pass-through needs event_time with enough resolution
