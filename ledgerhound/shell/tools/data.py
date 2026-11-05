@@ -440,8 +440,11 @@ class DataToolsMixin:
                 from ledgerhound.shell.kernel_helpers import ANALYST_HELPERS_SNIPPET
 
                 def _helpers_present() -> bool:
+                    # globals(), not dir(): inside a generator expression
+                    # dir() lists the generator's own scope, so the check
+                    # always said MISSING (a false warning on every start).
                     chk = self._kernel._exec_raw(
-                        "print('HELPERS_OK' if all(n in dir() for n in "
+                        "print('HELPERS_OK' if all(n in globals() for n in "
                         "('check_leakage','evaluate_feature','evaluate_features')) "
                         "else 'HELPERS_MISSING')", timeout=60)
                     return "HELPERS_OK" in (getattr(chk, "output", "") or "")
