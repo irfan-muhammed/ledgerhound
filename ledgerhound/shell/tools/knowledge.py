@@ -2,8 +2,7 @@
 ledgerhound.shell.tools.knowledge
 =================================
 
-The Knowledge Pack in the session: kb_add (and, from step 3, the search the
-kb_search tool runs). A write to the TEAM pack is shared with everyone, so it
+The Knowledge Pack in the session: kb_add and kb_search. A write to the TEAM pack is shared with everyone, so it
 goes through the person gate; the project pack does not.
 """
 
@@ -14,7 +13,7 @@ TEAM_NO = "no, keep it out"
 
 
 class KnowledgeToolsMixin:
-    """kb_add and the session's handle on the Knowledge Pack."""
+    """kb_add, kb_search and the session's handle on the Knowledge Pack."""
 
     kb_actor: str = "analyst"
     _pack = None
@@ -24,6 +23,30 @@ class KnowledgeToolsMixin:
             from ledgerhound.kb import KnowledgePack
             self._pack = KnowledgePack()
         return self._pack
+
+    def _recorded_claims(self) -> list[str]:
+        import json
+        path = getattr(self, "_findings_path", None)
+        out = []
+        if path is not None and path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    out.append(str(json.loads(line).get("claim", "")))
+                except ValueError:
+                    continue
+        return [c for c in out if c]
+
+    def _tool_kb_search(self, query: str, max_hits: int = 8) -> str:
+        """One ranked search over recorded findings (this session, earlier
+        sessions on this dataset, team findings) and the Knowledge Pack."""
+        from ledgerhound.kb.search import search_text
+        findings = [("this session", c) for c in self._recorded_claims()]
+        findings += [("earlier session on this dataset", c) for _, c in self._book_history_claims()]
+        findings += [(f"team: {n}", c) for n, c in self._team_kb_claims()]
+        out = search_text(query, self.knowledge_pack(), findings, k=max_hits)
+        hits = sum(1 for ln in out.splitlines() if ln.startswith("- ["))
+        self._events.append("kb_search", query=query[:300], hits=hits)
+        return out
 
     def _tool_kb_add(self, entry: dict = None, document: str = "", scope: str = "project",
                      title: str = "", source: str = "") -> str:

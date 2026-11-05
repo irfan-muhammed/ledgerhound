@@ -80,6 +80,13 @@ def kb_list(type: Optional[str] = typer.Option(None, "--type", "-t"),
         typer.echo(f"skipped: {err}", err=True)
 
 
+@kb_app.command("search")
+def kb_search(query: str = typer.Argument(...), k: int = typer.Option(8, "--k")) -> None:
+    """Search the Knowledge Pack (BM25; hybrid with LEDGERHOUND_KB_EMBEDDINGS=1)."""
+    from ledgerhound.kb.search import search_text
+    typer.echo(search_text(query, _pack(), k=k))
+
+
 @kb_app.command("validate")
 def kb_validate(path: Optional[Path] = typer.Argument(None, help="a file to check before adding; "
                                                        "omit to check every scope")) -> None:

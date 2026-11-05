@@ -253,6 +253,13 @@ TOOL_SPECS: list[dict] = [
                        "description": "Label roles the data does not have: label, label_time, label_source."}},
             "required": []}}},
     {"type": "function", "function": {
+        "name": "kb_search",
+        "description": "Search recorded findings (this session, earlier sessions on this dataset, team) and the Knowledge Pack (typologies, rules, dictionary, known findings, label policies, documents). Hits are quoted with their source; knowledge-pack text is unverified on this dataset until you check it on data.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "max_hits": {"type": "integer"}},
+            "required": ["query"]}}},
+    {"type": "function", "function": {
         "name": "kb_add",
         "description": "Add to the Knowledge Pack: one structured entry (type typology, rule, dictionary, known_finding or label_policy) or one document (.md, .txt, .pdf path). Entries are validated strictly; a rule's output_column is then blocked as a feature, a label_policy sets label maturity. scope=team is shared with everyone and asks the user first.",
         "parameters": {"type": "object", "properties": {

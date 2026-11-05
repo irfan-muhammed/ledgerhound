@@ -129,14 +129,6 @@ class LedgerhoundSession:
                 return _input_required(question, options)
             return result
 
-    async def run_local(self, fn, *args):
-        """A server-side step that is not a tool-layer tool (kb_search)."""
-        import anyio
-        if self._lock is None:
-            self._lock = anyio.Lock()
-        async with self._lock:
-            return await anyio.to_thread.run_sync(fn, *args)
-
     # -- order rules ---------------------------------------------------------
     def note_falsified(self, claim: str) -> None:
         from ledgerhound.shell.guardrails.findings import claim_tokens
@@ -162,39 +154,6 @@ class LedgerhoundSession:
             except Exception:  # noqa: BLE001
                 continue
         return out
-
-    def kb_search(self, query: str, max_hits: int = 8) -> str:
-        """Keyword search over recorded findings: this session's, this
-        dataset's earlier sessions (dataset card), and the team findings
-        file. Phase 3 adds Knowledge Pack documents and embeddings."""
-        from ledgerhound.shell.guardrails.findings import claim_tokens
-        q = claim_tokens(query)
-        if not q:
-            return "kb_search needs a query with at least one distinctive word."
-        pool: list[tuple[str, str]] = []
-        for f in self.recorded_findings():
-            pool.append(("this session", str(f.get("claim", ""))))
-        for ref, claim in self.tools._book_history_claims():
-            pool.append(("earlier session on this dataset", claim))
-        for name, stmt in self.tools._team_kb_claims():
-            pool.append((f"team: {name}", stmt))
-        scored = []
-        for source, text in pool:
-            hit = len(q & claim_tokens(text))
-            if hit:
-                scored.append((hit, source, text))
-        self.tools._log("kb_search", query=query[:300], hits=len(scored))
-        if not scored:
-            return (f"no recorded finding matches {query!r} (searched {len(pool)} "
-                    "finding(s): this session, earlier sessions on this dataset, "
-                    "team findings). Knowledge Pack documents are not searchable "
-                    "until Phase 3.")
-        scored.sort(key=lambda s: -s[0])
-        lines = [f"{len(scored)} match(es) for {query!r}; findings are from data, "
-                 "team entries are unverified on this dataset:"]
-        for hit, source, text in scored[:max_hits]:
-            lines.append(f"- [{source}] {text[:400]}")
-        return "\n".join(lines)
 
 
 def _norm(s: str) -> str:
@@ -393,10 +352,11 @@ def build_server(session: LedgerhoundSession):
 
     @server.tool()
     async def kb_search(query: str, ctx: Context) -> str:
-        """Keyword search over recorded findings: this session, earlier
-        sessions on this dataset, and team findings. Knowledge Pack documents
-        are not searchable until Phase 3."""
-        return await s.run_local(s.kb_search, query)
+        """Search recorded findings and the Knowledge Pack (typologies, rules,
+        dictionary, known findings, label policies, documents). Hits are
+        quoted DATA with their source; knowledge-pack text is unverified on
+        this dataset until checked with run_analysis."""
+        return await s.call(ctx, "kb_search", {"query": query})
 
     @server.tool()
     async def report(title: str, markdown: str, ctx: Context) -> str:

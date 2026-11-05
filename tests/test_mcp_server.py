@@ -144,13 +144,15 @@ async def test_empty_check_feature_is_refused(session):
 async def test_kb_search_finds_recorded_findings(session, fraud_csv):
     async with Client(build_server(session)) as c:
         await call(c, "load_dataset", path=str(fraud_csv))
-        miss = await call(c, "kb_search", query="larger amounts")
-        assert miss.startswith("no recorded finding") and "Phase 3" in miss
+        before = await call(c, "kb_search", query="larger amounts legitimate")
+        assert "this session" not in before
         await confirm_roles(c)
         await call(c, "falsify", claim=CLAIM)
         await call(c, "record_finding", claim=CLAIM, sample_frame="population_estimate")
         hit = await call(c, "kb_search", query="larger amounts legitimate")
-        assert "this session" in hit and "larger amounts" in hit
+        assert "[finding · this session] (from data)" in hit and "larger amounts" in hit
+        # the finding outranks knowledge-pack text that merely says "amounts"
+        assert hit.index("this session") < hit.index("unverified)") if "unverified)" in hit else True
         assert "a query" in await call(c, "kb_search", query="the and of")
 
 
