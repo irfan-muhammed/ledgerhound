@@ -24,6 +24,25 @@ class KnowledgeToolsMixin:
             self._pack = KnowledgePack()
         return self._pack
 
+    def _dataset_names(self) -> list[str]:
+        from ledgerhound.kb.policy import dataset_names
+        return dataset_names(getattr(self, "_loaded_path", "") or "",
+                             getattr(self, "_dataset_id", "") or "")
+
+    def _pack_known_claims(self) -> list[tuple[str, str]]:
+        try:
+            from ledgerhound.kb.policy import known_claims
+            return known_claims(self.knowledge_pack(), self._dataset_names())
+        except Exception as e:  # noqa: BLE001 -- advisory, never blocks a run
+            self._events.append("kb_error", op="known_claims", error=str(e)[:300])
+            return []
+
+    def _pack_ref(self, ref: str) -> str:
+        """'type/id' of the entry `ref` names, or "" if there is none."""
+        from ledgerhound.kb.policy import resolve_ref
+        e = resolve_ref(self.knowledge_pack(), ref)
+        return f"{e['type']}/{e['id']}" if e is not None else ""
+
     def _recorded_claims(self) -> list[str]:
         import json
         path = getattr(self, "_findings_path", None)

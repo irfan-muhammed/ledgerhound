@@ -37,6 +37,8 @@ def finding_line(ev: Event) -> str:
     # are compared -- the reported bug (fraud vs non-fraud night-share
     # computed under two different hour windows, then compared as if
     # equivalent) had no such field to catch it on.
+    if p.get("kb_contradicts"):
+        entry["kb_contradicts"] = p["kb_contradicts"]
     predicate = p.get("predicate", "")
     if predicate:
         entry["predicate"] = predicate

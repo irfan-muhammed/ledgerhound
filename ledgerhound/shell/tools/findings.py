@@ -85,7 +85,8 @@ class FindingsToolsMixin:
 
     def _tool_record_finding(self, claim: str, sample_frame: str,
                              evidence: str = "", predicate: str = "",
-                             delta: str = "", pvalue: float = None) -> str:
+                             delta: str = "", pvalue: float = None,
+                             kb_contradicts: str = "") -> str:
         """V3-061 (adversarial loop, strengthened): checked BEFORE
         anything is written, against three sources -- the domain profile,
         this book's own cross-session history, and the team knowledge
@@ -97,6 +98,12 @@ class FindingsToolsMixin:
         refused = self._roles_refusal("record_finding")
         if refused:
             return refused
+        contradicts = ""
+        if kb_contradicts.strip():
+            contradicts = self._pack_ref(kb_contradicts)
+            if not contradicts:
+                return (f"REFUSED: kb_contradicts={kb_contradicts!r} names no Knowledge Pack "
+                        "entry (use type/id, e.g. known_finding/night_share). Nothing was recorded.")
         # V5-002: every attempt joins the family, including the ones refused
         # below. Counting only successes would make a long fruitless search
         # look like a short decisive one.
@@ -105,7 +112,7 @@ class FindingsToolsMixin:
         refusal, detail = self._restatement_guard.check(
             claim, delta, domain_profile=self._domain_profile,
             book_claims=self._book_history_claims(),
-            team_claims=self._team_kb_claims())
+            team_claims=self._team_kb_claims() + self._pack_known_claims())
         if refusal:
             self._events.append("finding_blocked_as_restatement",
                                 claim=claim[:500], **detail)
@@ -117,8 +124,9 @@ class FindingsToolsMixin:
         # V3-012: findings.jsonl is now a projection of the event stream --
         # the same view function backs both this live write and
         # `ledgerhound run-views` bulk regeneration.
+        extra = {"kb_contradicts": contradicts} if contradicts else {}
         ev = self._events.append("finding", claim=claim, evidence=full_evidence,
-                                 sample_frame=sample_frame, predicate=predicate)
+                                 sample_frame=sample_frame, predicate=predicate, **extra)
         # V3-052: catch two findings comparing the "same" quantity under
         # DIFFERENT predicates before the model treats them as equivalent.
         # Real bug this reproduces: fraud night-share computed as
@@ -166,6 +174,8 @@ class FindingsToolsMixin:
             base += f" -- {assessment.status.upper()}"
         if delta.strip():
             base += " (with stated delta over a known match)"
+        if contradicts:
+            base += f" -- flagged as contradicting your knowledge base ({contradicts})"
         parts = [p for p in (base, assessment.note, predicate_warning) if p]
         return "\n".join(parts)
 

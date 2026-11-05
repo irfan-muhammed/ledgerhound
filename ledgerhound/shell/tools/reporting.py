@@ -54,6 +54,10 @@ class ReportingToolsMixin:
                         bits.append(f"evidence: {ev}")
                     if frame:
                         bits.append(f"frame: {frame}")
+                    bits.append("verified on data")
+                    if rec.get("kb_contradicts"):
+                        bits.append("**contradicts your knowledge base "
+                                    f"({rec['kb_contradicts']})**")
                     out.append(" — ".join(bits))
                 self._findings_consumed_pending = len(lines)
         except Exception:  # noqa: BLE001 -- never break a save over this
@@ -196,6 +200,9 @@ class ReportingToolsMixin:
         else:
             lines.append("- No analysis code was run.")
         lines.extend(self._roles_provenance())
+        lines.append("- Every finding in this report was recorded through Ledgerhound and is "
+                     "tagged \"verified on data\". Anything in the text that comes from your "
+                     "knowledge base, and is not a finding, is unverified on this data.")
         log = getattr(getattr(self.registry, "gate", None), "log", [])
         by_person = [d for d in log if getattr(d, "approved_by", "") == "person"]
         if by_person:

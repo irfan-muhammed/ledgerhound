@@ -333,17 +333,21 @@ def build_server(session: LedgerhoundSession):
                              sample_frame: Literal["within_stratum", "cross_stratum",
                                                    "population_estimate", "unknown"] = "unknown",
                              evidence: str = "", predicate: str = "",
-                             pvalue: Optional[float] = None, delta: str = "") -> str:
+                             pvalue: Optional[float] = None, delta: str = "",
+                             kb_contradicts: str = "") -> str:
         """Record an evidence-backed finding for the certified report. Refuses
         a claim not yet passed to falsify, and a restatement of a known
         finding unless `delta` says what it adds. Give `predicate` (the exact
-        condition the numbers were computed under) and `pvalue` if a test ran."""
+        condition the numbers were computed under) and `pvalue` if a test ran.
+        If the data contradicts a Knowledge Pack entry, name it in
+        kb_contradicts (type/id); the report flags it."""
         if not s.was_falsified(claim):
             return ("REFUSED: call falsify with this claim first, run the routes "
                     "it returns with run_analysis, then record it. Nothing was "
                     "recorded.")
         args = {"claim": claim, "sample_frame": sample_frame}
-        for k, v in (("evidence", evidence), ("predicate", predicate), ("delta", delta)):
+        for k, v in (("evidence", evidence), ("predicate", predicate), ("delta", delta),
+                     ("kb_contradicts", kb_contradicts)):
             if v:
                 args[k] = v
         if pvalue is not None:

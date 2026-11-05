@@ -56,6 +56,7 @@ TOOL_SPECS: list[dict] = [
         "parameters": {"type": "object", "properties": {
             "claim": {"type": "string"},
             "evidence": {"type": "string"},
+            "kb_contradicts": {"type": "string", "description": "type/id of a Knowledge Pack entry this finding contradicts; the report flags it."},
             "sample_frame": {"type": "string",
                              "enum": ["within_stratum", "cross_stratum",
                                       "population_estimate", "unknown"]},

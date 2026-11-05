@@ -52,7 +52,8 @@ class RolesToolsMixin:
         if stored is not None:
             self._roles, self._roles_source = stored, "earlier session"
         else:
-            self._roles = infer_roles(self._df, data_sha256=self._data_sha256)
+            self._roles = infer_roles(self._df, data_sha256=self._data_sha256,
+                                      hints=self._pack_role_hints(cols))
             self._roles_source = "inferred"
         rm = self._roles
         self._events.append("roles_proposed", source=self._roles_source,
@@ -68,6 +69,14 @@ class RolesToolsMixin:
                 "steps (record_finding, the leakage check, the report) refuse "
                 "until the user has confirmed them. Exploring with run_python "
                 "is fine meanwhile.")
+
+    def _pack_role_hints(self, cols: list) -> dict:
+        try:
+            from ledgerhound.kb.policy import role_hints
+            return role_hints(self.knowledge_pack(), cols, self._dataset_names())
+        except Exception as e:  # noqa: BLE001 -- a broken pack never blocks a load
+            self._events.append("kb_error", op="role_hints", error=str(e)[:300])
+            return {}
 
     def _note_cell_ran(self) -> None:
         if self._roles is not None and not self._roles.confirmed:
@@ -88,17 +97,30 @@ class RolesToolsMixin:
         unusable as an input is refused outright, as is a label argument that
         is not the confirmed label."""
         from ledgerhound.roles import NOT_A_FEATURE, ROLES
+        problems = []
+        try:
+            from ledgerhound.kb.policy import rule_outputs
+            outs = rule_outputs(self.knowledge_pack(), self._dataset_names())
+        except Exception:  # noqa: BLE001
+            outs = {}
+        for f in features:
+            if str(f) in outs:
+                problems.append(f"{f} is the output of rule {outs[str(f)]} in your knowledge "
+                                "pack: it is computed downstream of the label")
         rm = self._roles
         if rm is None or not rm.confirmed:
+            if problems:
+                self._events.append("feature_refused_by_role", features=list(map(str, features)),
+                                    label=label, problems=problems)
+                return ("REFUSED: " + "; ".join(problems) + ". Nothing was computed.")
             return ""
         lab = rm.first("label")
-        problems = []
         if label and lab and label != lab:
             problems.append(f"{label!r} is not the confirmed label column ({lab!r}); "
                             f"its role is {rm.role_of(label) or 'not a column'}")
         for f in features:
             r = rm.role_of(str(f))
-            if r in NOT_A_FEATURE:
+            if r in NOT_A_FEATURE and str(f) not in outs:
                 problems.append(f"{f} has role {r} ({ROLES[r]}) and cannot be a feature")
         if not problems:
             return ""

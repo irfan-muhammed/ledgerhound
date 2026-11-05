@@ -212,7 +212,7 @@ def infer_roles(df: pd.DataFrame, *, hints: Optional[dict[str, str]] = None,
     for col in df.columns:
         name = str(col)
         if hints and name in hints:
-            rm.columns[name] = Assignment(hints[name], "medium", "from the data dictionary")
+            rm.columns[name] = Assignment(hints[name], "medium", "from your Knowledge Pack")
             continue
         try:
             rm.columns[name] = _propose(name, df[col], n)
