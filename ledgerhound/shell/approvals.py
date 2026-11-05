@@ -31,6 +31,10 @@ from ledgerhound.analyst.hitl import _ASKED_LEVELS, HITLDecision, HITLGate
 # client cannot ask at all.
 ElicitFn = Callable[[str, list], Optional[str]]
 
+# approved_by for a form the client returned as "decline": safe, but not
+# provably a person (see RelayGate._relay).
+DECLINED_VIA_CLIENT = "declined via client"
+
 
 class NeedsPersonDecision(Exception):
     """A tool needs a person's choice that no one has given yet."""
@@ -90,7 +94,11 @@ class RelayGate(HITLGate):
         if self.elicit is not None:
             ans = self.elicit(question, list(options))
             if ans is not None:
-                self.last_approved_by = "person"
+                # Only an accepted choice is provably a person's. A decline
+                # may be the person -- or the client's own policy (Codex with
+                # approval "never" declines every form unseen). It is safe
+                # (nothing is authorised) but never claimed as a person's.
+                self.last_approved_by = "person" if ans else DECLINED_VIA_CLIENT
                 if not ans:
                     # Declined/cancelled. By convention the LAST option is the
                     # safe "no" (cancel, keep analysing, free-form); never

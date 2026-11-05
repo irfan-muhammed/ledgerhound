@@ -108,6 +108,8 @@ class LedgerhoundSession:
             finally:
                 self.gate.elicit = None
                 self.gate.agent_answer = None
+            for action in route.get("replies", []):
+                self.tools._log("hitl", tier="client_reply", name=name, action=action)
             # input_required only where it is the protocol's way to ask: a
             # 2026-07-28 connection (no back-channel). On a handshake-era
             # connection it is not a valid result.
@@ -280,6 +282,8 @@ def _elicitor(ctx, route: Optional[dict] = None):
             return None
         action = getattr(res, "action", "")
         data = getattr(res, "data", None)
+        if route is not None:
+            route.setdefault("replies", []).append(str(action))
         return _answer_for(action, getattr(data, "choice", None))
     return elicit
 

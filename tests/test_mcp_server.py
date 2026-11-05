@@ -474,17 +474,25 @@ async def test_cancelled_elicitation_is_not_a_persons_decision(mode, session, fr
 
 
 @MODES
-async def test_declined_elicitation_is_the_persons_no(mode, session, fraud_csv):
+async def test_declined_elicitation_is_not_claimed_as_a_person(mode, session, fraud_csv):
+    # Codex with approval "never" declines every form unseen. A decline is
+    # safe (nothing authorised) but is never counted as a person's decision.
     async with Client(build_server(session), mode=mode,
                       elicitation_callback=choose(lambda opts: None)) as c:
         await call(c, "load_dataset", path=str(fraud_csv))
-        await call(c, AUTH_Q, summary="features ready")
+        r = await call(c, AUTH_Q, summary="features ready")
+        assert "NOT authorised" in r
+        await call(c, "falsify", claim=CLAIM)
+        await call(c, "record_finding", claim=CLAIM, sample_frame="population_estimate")
+        saved = await call(c, "report", title="t", markdown="m")
     choices = [d for d in session.gate.log if d.level == "choose"]
-    assert choices and choices[-1].approved_by == "person"
-    if mode == "auto":
-        replies = _events(session, "hitl")
-        assert any(e.get("tier") == "client_reply" and e.get("action") == "decline"
-                   for e in replies)
+    assert choices and all(d.approved_by == "declined via client" for d in choices)
+    assert not [d for d in session.gate.log if d.approved_by == "person"]
+    replies = [e for e in _events(session, "hitl") if e.get("tier") == "client_reply"]
+    assert replies and all(e["action"] == "decline" for e in replies)
+    report = Path(re.search(r"-> (\S+)", saved).group(1)).read_text(encoding="utf-8")
+    assert "Decisions made by a person" not in report
+    assert "declined through the client's form" in report
 
 
 def test_answer_mapping():

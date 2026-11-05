@@ -196,6 +196,12 @@ class ReportingToolsMixin:
         by_person = [d for d in log if getattr(d, "approved_by", "") == "person"]
         if by_person:
             lines.append(f"- Decisions made by a person: {len(by_person)}.")
+        declined = [d for d in log
+                    if getattr(d, "approved_by", "") == "declined via client"]
+        if declined:
+            lines.append(f"- {len(declined)} question(s) declined through the client's "
+                         "form -- by the person or by the client's own policy; "
+                         "the protocol does not say which. Nothing was authorised by them.")
         agent = self.agent_approvals()
         if agent:
             lines.append(f"- **{len(agent)} decision(s) approved by the agent, "
