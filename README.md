@@ -748,6 +748,90 @@ stats = client.execute_stats_only("""
 
 ---
 
+## Use it from an agent (MCP) — Phase 2
+
+`ledgerhound mcp` serves the analyst over MCP stdio, so Claude Code, Codex,
+OpenCode or any MCP client can drive it. Install with `pip install
+'ledgerhound[mcp]'` (adds the MCP SDK, the Jupyter kernel and psutil).
+
+**Tools (8 of the planned 12):** `load_dataset`, `profile`, `run_analysis`,
+`check_feature`, `falsify`, `record_finding`, `kb_search` and `report`. Four
+workflow tools come with them, because the order rules need them:
+`set_goal`, `set_methodology`, `record_data_answer` and
+`request_modeling_authorisation`. Two resources are also served:
+`ledgerhound://findings` and `ledgerhound://isolation`.
+
+**Phase 3:** `confirm_roles`, `sql`, `build_sample` and `kb_add`, plus the
+prompts (`/fraud-eda` and others) and the Knowledge Pack behind `kb_search`.
+Today `kb_search` is a keyword search over recorded findings.
+
+**Rules the server enforces:**
+- `record_finding` refuses a claim that has not been through `falsify`.
+- `report` refuses while no finding is recorded.
+- Analysis code runs only in the analysis kernel. There is no fallback to
+  in-process exec.
+
+**Isolation (ADR 0001, `docs/adr/0001-kernel-isolation.md`).** The guarantee
+is narrow: *the analysis kernel cannot open network connections.* It does
+**not** mean "data stays home". The agent reads tool results, and they go
+to its model. On Linux/WSL with `bubblewrap`, the kernel runs with:
+- no network
+- a read-only root
+- writes only to the run folder
+- an allow-listed environment
+- a cgroup memory cap and a wall-clock cell timeout
+
+On native Windows the kernel runs with partial isolation, and every report
+says so. `--require-isolation` refuses to run anything less than sandboxed.
+
+**Person decisions.** Modelling authorisation is never the agent's call
+alone:
+- Where the client can show a form (MCP elicitation), the person answers it.
+- A client that cannot show one gets `NEEDS USER DECISION`. The agent asks
+  the person and calls again with `confirm=`. The report flags that approval
+  as *approved by the agent, not verified by a person*.
+- A cancelled form counts as nobody deciding. It is never recorded as the
+  person's decision.
+
+**Register it**
+
+```bash
+# Claude Code
+claude mcp add ledgerhound -- ledgerhound mcp --out-root ~/ledgerhound-runs
+
+# Codex  (~/.codex/config.toml)
+codex mcp add ledgerhound -- ledgerhound mcp --out-root ~/ledgerhound-runs
+```
+
+```jsonc
+// OpenCode  (opencode.json in the project)
+{ "mcp": { "ledgerhound": { "type": "local",
+    "command": ["ledgerhound", "mcp", "--out-root", "/home/you/ledgerhound-runs"] } } }
+```
+
+From Windows with Ledgerhound installed in WSL, use the command `wsl.exe` with
+the arguments `-d Ubuntu -- /path/to/venv/bin/ledgerhound mcp ...`.
+
+Clients run headless (`claude -p`, `opencode run`, `codex exec`) must close stdin
+(`< /dev/null`), or they wait for piped input.
+
+**Codex specifics.**
+- Codex asks before every MCP tool call. A headless run with approval
+  `never` refuses each one. To pre-approve Ledgerhound's tools only, add
+  `default_tools_approval_mode = "approve"` under `[mcp_servers.ledgerhound]`.
+  Ledgerhound still gates modelling authorisation itself.
+- In that mode Codex declines every elicitation form without showing it.
+  Ledgerhound records these as *declined via client*, never as a person's
+  decision, so the agent cannot authorise modelling this way.
+- On a ChatGPT login, pick a model from `codex debug models` with `-m`. The
+  default model may not be available on your plan.
+
+Checked on 2026-11-05: Claude Code (from Windows via `wsl.exe`), OpenCode
+1.19 and Codex 0.166 each completed the fraud flow end to end, from load
+through profile, analysis, falsify, finding and authorisation to report.
+
+---
+
 ## Telemetry & Observability — what is written, and where
 
 Ledgerhound writes two kinds of record. They serve different purposes and live in

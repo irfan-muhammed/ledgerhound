@@ -307,7 +307,7 @@ class KernelExecutor:
 
     def __init__(self, scratch_dir: Path, data_path: str | None = None,
                  engine: str = "pandas", timeout: int = 120,
-                 features_dir: Path | None = None):
+                 features_dir: Path | None = None, isolation=None):
         self._scratch = Path(scratch_dir)
         self._scratch.mkdir(parents=True, exist_ok=True)
         # V3-049: the kernel process's cwd is already `scratch` (see
@@ -336,15 +336,88 @@ class KernelExecutor:
         from rich.console import Console
         self._console = Console()
 
+        # ADR 0001: the kernel runs under an IsolationPolicy (None = "off",
+        # the pre-Phase-2 behaviour). `isolation_report` names only what is
+        # actually enforced; callers surface it, log it and certify it.
+        self._dead_reason = ""
+        self._poller = None
+        self._kernel_dir = None
+        self._start_kernel(isolation)
+        self._run_setup()
+
+    def _start_kernel(self, isolation) -> None:
+        import dataclasses
+        import tempfile
+
         from jupyter_client import KernelManager
+
+        from ledgerhound.runtime.isolation import IsolationPolicy
+        policy = isolation or IsolationPolicy(mode="off", cell_timeout_s=self._timeout)
+        # Short path under /tmp: Unix socket paths are capped near 108 bytes,
+        # and the ipc transport puts its sockets here. Private HOME too.
+        self._kernel_dir = Path(tempfile.mkdtemp(prefix="lhk-"))
+        home = self._kernel_dir / "home"
+        home.mkdir()
+        writable = [self._scratch, self._features_dir, self._kernel_dir]
+        readable = [Path(self._data_path)] if self._data_path else []
+        plan = policy.plan(writable=writable, home=home, readable=readable)
+        self.isolation_report = dataclasses.replace(plan.report,
+                                                    cell_timeout_s=self._timeout)
+
+        class _WrappedKernelManager(KernelManager):
+            def format_kernel_cmd(self, extra_arguments=None):
+                return plan.prefix + super().format_kernel_cmd(extra_arguments)
+
         with self._console.status("[magenta]Starting analysis kernel...[/magenta]"):
-            self._km = KernelManager(kernel_name="python3")
-            self._km.start_kernel(cwd=str(self._scratch))
+            km = _WrappedKernelManager(kernel_name="python3", transport=plan.transport)
+            if plan.transport == "ipc":
+                km.ip = str(self._kernel_dir / "k")
+                km.connection_file = str(self._kernel_dir / "kernel.json")
+            kw = {"cwd": str(self._scratch)}
+            if plan.env is not None:
+                kw["env"] = plan.env
+            self._km = km
+            self._km.start_kernel(**kw)
             self._kc = self._km.client()
             self._kc.start_channels()
             self._kc.wait_for_ready(timeout=60)
 
-        self._run_setup()
+        if plan.rss_limit_bytes:
+            self._start_memory_poller(plan.rss_limit_bytes)
+
+    def _kernel_pid(self) -> int | None:
+        prov = getattr(self._km, "provisioner", None)
+        proc = getattr(prov, "process", None)
+        return getattr(proc, "pid", None)
+
+    def _start_memory_poller(self, limit: int, interval: float = 0.5) -> None:
+        """No cgroup: watch the kernel's real resident memory (whole process
+        tree) and kill it past `limit`. RSS, not address space -- see ADR 0001."""
+        import threading
+
+        from ledgerhound.runtime.isolation import _gib, tree_rss
+        stop = threading.Event()
+
+        def _watch():
+            while not stop.wait(interval):
+                pid = self._kernel_pid()
+                if pid is None:
+                    return
+                rss = tree_rss(pid)
+                if rss > limit:
+                    self._dead_reason = (
+                        f"MemoryError: the kernel used {_gib(rss)}, over its "
+                        f"{_gib(limit)} cap, and was stopped. Its variables are "
+                        f"gone; reload the data and work on a sample or in chunks.")
+                    try:
+                        self._km.shutdown_kernel(now=True)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    return
+
+        t = threading.Thread(target=_watch, name="lh-kernel-memory", daemon=True)
+        t.start()
+        self._poller = stop
 
     # ------------------------------------------------------------------ #
 
@@ -802,26 +875,40 @@ class KernelExecutor:
         except Exception:
             return {}, clean
 
+    def _dead_result(self, output: str = "") -> ExecResult:
+        return ExecResult(success=False, output=output,
+                          error=self._dead_reason or "RuntimeError: the kernel has stopped.")
+
     def _exec_raw(self, code: str, timeout: int) -> ExecResult:
-        """Send code to the kernel and collect outputs."""
+        """Send code to the kernel and collect outputs.
+
+        `timeout` is WALL-CLOCK for the whole cell (ADR 0001), not a gap
+        between messages: a cell that prints once a minute still stops at
+        its deadline. A kernel that dies mid-cell (cgroup OOM kill, the RSS
+        poller) is noticed within a second instead of waiting out the clock.
+        """
         from queue import Empty
+        if self._dead_reason:
+            return self._dead_result()
         msg_id = self._kc.execute(code)
         out_chunks: list[str] = []
         error_text = ""
+        deadline = time.monotonic() + timeout
 
         while True:
             try:
-                msg = self._kc.get_iopub_msg(timeout=timeout)
+                msg = self._kc.get_iopub_msg(timeout=1.0)
             except Empty:
-                # Hung -- interrupt and report as failure
-                try:
-                    self._km.interrupt_kernel()
-                except Exception:
-                    pass
-                return ExecResult(
-                    success=False, output="".join(out_chunks).strip(),
-                    error=f"TimeoutError: step exceeded {timeout}s and was interrupted.",
-                )
+                if self._dead_reason or not self._km.is_alive():
+                    if not self._dead_reason:
+                        self._dead_reason = (
+                            "MemoryError: the kernel process died mid-cell, most "
+                            "likely killed at its memory cap. Its variables are "
+                            "gone; reload the data and work on a sample or in chunks.")
+                    return self._dead_result("".join(out_chunks).strip())
+                if time.monotonic() < deadline:
+                    continue
+                return self._interrupt_after_timeout(out_chunks, timeout)
 
             if msg.get("parent_header", {}).get("msg_id") != msg_id:
                 continue
@@ -831,6 +918,8 @@ class KernelExecutor:
 
             if mt == "stream":
                 out_chunks.append(content.get("text", ""))
+                if time.monotonic() >= deadline:
+                    return self._interrupt_after_timeout(out_chunks, timeout)
             elif mt == "execute_result":
                 out_chunks.append(content.get("data", {}).get("text/plain", ""))
             elif mt == "display_data":
@@ -851,6 +940,37 @@ class KernelExecutor:
         return ExecResult(
             success=True,
             output=(output or "[Executed -- no output]"),
+        )
+
+    def _interrupt_after_timeout(self, out_chunks: list[str], timeout: int) -> ExecResult:
+        """Interrupt a cell past its deadline. If the kernel will not go idle
+        within a grace period (stuck in C code that ignores SIGINT), stop it:
+        a hung kernel would otherwise block every later cell."""
+        from queue import Empty
+        try:
+            self._km.interrupt_kernel()
+        except Exception:  # noqa: BLE001
+            pass
+        grace = time.monotonic() + 15
+        while time.monotonic() < grace:
+            try:
+                msg = self._kc.get_iopub_msg(timeout=1.0)
+            except Empty:
+                continue
+            if (msg["msg_type"] == "status"
+                    and msg["content"].get("execution_state") == "idle"):
+                break
+        else:
+            self._dead_reason = (
+                f"TimeoutError: a cell ran past {timeout}s, ignored the interrupt "
+                f"and the kernel was stopped. Its variables are gone; reload the data.")
+            try:
+                self._km.shutdown_kernel(now=True)
+            except Exception:  # noqa: BLE001
+                pass
+        return ExecResult(
+            success=False, output="".join(out_chunks).strip(),
+            error=f"TimeoutError: step exceeded {timeout}s and was interrupted.",
         )
 
     # ------------------------------------------------------------------ #
@@ -906,6 +1026,11 @@ class KernelExecutor:
             self._km.shutdown_kernel(now=True)
         except Exception:
             pass
+        if getattr(self, "_poller", None) is not None:
+            self._poller.set()
+        if getattr(self, "_kernel_dir", None) is not None:
+            import shutil
+            shutil.rmtree(self._kernel_dir, ignore_errors=True)
 
     def __del__(self):
         try:

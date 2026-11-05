@@ -96,6 +96,13 @@ class HITLDecision:
     package: Optional[dict] = None   # the full decision package, for high tier
     note: str = ""                   # the undo/report note, for medium tier
     picked: list = field(default_factory=list)  # multi-select choices, for choose_multi
+    # Who actually answered (ADR 0001): "person", "agent" (relayed by an MCP
+    # host agent, unverified), "default" (auto_yes, nobody asked) or
+    # "not asked" (low/medium tiers, which proceed without a question).
+    approved_by: str = "person"
+
+
+_ASKED_LEVELS = ("confirm", "choose", "choose_multi", "high")
 
 
 @dataclass
@@ -106,6 +113,10 @@ class HITLGate:
     _pending_high: list[dict] = field(default_factory=list)
 
     def _record(self, d: HITLDecision) -> HITLDecision:
+        if d.level not in _ASKED_LEVELS:
+            d.approved_by = "not asked"
+        elif self.prompt is auto_yes:
+            d.approved_by = "default"
         self.log.append(d)
         return d
 

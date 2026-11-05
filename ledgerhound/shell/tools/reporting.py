@@ -119,6 +119,9 @@ class ReportingToolsMixin:
                 f"*Iteration {it}. Builds on: "
                 + ", ".join(f"`{p}`" for p in prev[-3:])
                 + ".*\n\n" + markdown)
+        # ADR 0001: every report says how its code ran and who approved what.
+        # Written by the tool, never by the model, so it cannot be edited out.
+        markdown = markdown.rstrip() + "\n\n" + self._provenance_section()
         self._report_history = prev + [f"{stem}.{fmt}"]
         try:
             from ledgerhound.analyst.save import ReportPayload, save_output
@@ -173,6 +176,41 @@ class ReportingToolsMixin:
                         f"{type(e2).__name__}: {e2}. Run folder: {self.run_dir}. "
                         f"{len(new_findings)} finding(s) NOT lost -- they "
                         f"remain unconsumed for the next save_report.")
+
+    def _provenance_section(self) -> str:
+        lines = ["## How this was produced", ""]
+        rep = self.isolation_report
+        if self._kernel_active and rep is not None:
+            lines.append(f"- Code ran in the analysis kernel; {rep.summary()}.")
+            if rep.level != "sandboxed":
+                lines.append("- **Warning:** the kernel was not fully sandboxed "
+                             "(see \"not enforced\" above).")
+        elif self._kernel_active:
+            lines.append("- Code ran in the analysis kernel with no isolation.")
+        elif self._ns is not None:
+            lines.append("- Code ran in the in-process exec sandbox, which is not "
+                         "a security boundary.")
+        else:
+            lines.append("- No analysis code was run.")
+        log = getattr(getattr(self.registry, "gate", None), "log", [])
+        by_person = [d for d in log if getattr(d, "approved_by", "") == "person"]
+        if by_person:
+            lines.append(f"- Decisions made by a person: {len(by_person)}.")
+        declined = [d for d in log
+                    if getattr(d, "approved_by", "") == "declined via client"]
+        if declined:
+            lines.append(f"- {len(declined)} question(s) declined through the client's "
+                         "form -- by the person or by the client's own policy; "
+                         "the protocol does not say which. Nothing was authorised by them.")
+        agent = self.agent_approvals()
+        if agent:
+            lines.append(f"- **{len(agent)} decision(s) approved by the agent, "
+                         "not verified by a person:**")
+            for d in agent:
+                q = next((ln.strip() for ln in str(d.question).splitlines()
+                          if ln.strip()), "")[:160]
+                lines.append(f"    - {q} -> {d.answer}")
+        return "\n".join(lines) + "\n"
 
     def _export_notebook(self) -> None:
         """V3-014: emit analysis.ipynb from the event stream on save_report.

@@ -121,15 +121,19 @@ class WorkflowToolsMixin:
             # feature exists to prevent. With no interactive prompt we
             # leave the methodology unset and say so; set_methodology and
             # --methodology both remain available.
+            # Same for an MCP host with no elicitation (RelayGate): nobody
+            # here can be asked mid-load, so the agent is told to ask.
             from ledgerhound.analyst.hitl import auto_yes
-            if getattr(self.registry.gate, "prompt", None) is auto_yes:
+            gate = self.registry.gate
+            if (getattr(gate, "prompt", None) is auto_yes
+                    or getattr(gate, "can_ask_person", True) is False):
                 self._events.append("methodology_set", template=None,
                                     chosen_by="not_asked_non_interactive")
                 return ("[METHODOLOGY] none adopted -- no interactive prompt "
                         "is available to choose one, and picking for you "
-                        "would be a guess. Use --methodology, or call "
-                        "set_methodology, to work a declared phase "
-                        "sequence.")
+                        "would be a guess. Use --methodology, or ask the "
+                        "user which one they want and call set_methodology, "
+                        "to work a declared phase sequence.")
 
             options, by_label = [], {}
             for n in names:
@@ -169,7 +173,15 @@ class WorkflowToolsMixin:
             self._save_methodology()
             self._refresh_schema_pin()
             return f"[METHODOLOGY] {m.name}\n\n{m.pin_block()}"
-        except Exception:  # noqa: BLE001 -- never break a data load
+        except Exception as e:  # noqa: BLE001 -- never break a data load
+            from ledgerhound.shell.approvals import NeedsPersonDecision
+            if isinstance(e, NeedsPersonDecision):
+                self._events.append("methodology_set", template=None,
+                                    chosen_by="not_asked_relay")
+                return ("[METHODOLOGY] none adopted -- the user could not be "
+                        "asked from here. Ask the user which methodology they "
+                        "want (set_methodology with no template lists them) "
+                        "and call set_methodology.")
             return ""
 
     def _save_methodology(self) -> None:
@@ -360,13 +372,19 @@ class WorkflowToolsMixin:
                 "no -- keep doing feature/analysis work"]
         decision = self.registry.gate.choose(q, opts)
         approved = str(decision.answer).startswith("authorise")
+        by = getattr(decision, "approved_by", "person")
         self.goal.modeling_authorised = approved
         if approved:
             self.goal.phase = "model"
         self._events.append("goal_gate", kind="modeling_authorisation",
-                            approved=approved, summary=summary[:1000])
+                            approved=approved, approved_by=by,
+                            summary=summary[:1000])
         self.goal.save(self.run_dir / "session_goal.json")
         self._refresh_schema_pin()
+        if approved and by == "agent":
+            return ("modelling AUTHORISED as relayed by the agent -- fit/train "
+                    "calls are now allowed. No person was verified to have "
+                    "approved this; the report will say so.")
         if approved:
             return ("modelling AUTHORISED by the analyst -- fit/train calls "
                     "are now allowed.")
