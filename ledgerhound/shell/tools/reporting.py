@@ -73,6 +73,9 @@ class ReportingToolsMixin:
         # `iteration` is accepted and IGNORED (V3-045). It is off the tool
         # schema now; the parameter stays so an older caller or a replayed
         # transcript that still sends it does not blow up.
+        refused = self._roles_refusal("the certified report")
+        if refused:
+            return refused
         fmt = "md"
         if self.project is not None:
             try:
@@ -192,6 +195,7 @@ class ReportingToolsMixin:
                          "a security boundary.")
         else:
             lines.append("- No analysis code was run.")
+        lines.extend(self._roles_provenance())
         log = getattr(getattr(self.registry, "gate", None), "log", [])
         by_person = [d for d in log if getattr(d, "approved_by", "") == "person"]
         if by_person:

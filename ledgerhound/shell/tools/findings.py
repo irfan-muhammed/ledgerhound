@@ -94,6 +94,9 @@ class FindingsToolsMixin:
         explicitly what this claim adds before it lands. A `delta` (or no
         match at all) proceeds to record normally, with the delta folded
         into the evidence trail when given."""
+        refused = self._roles_refusal("record_finding")
+        if refused:
+            return refused
         # V5-002: every attempt joins the family, including the ones refused
         # below. Counting only successes would make a long fruitless search
         # look like a short decisive one.

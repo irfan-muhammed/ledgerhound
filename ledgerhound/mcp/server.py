@@ -6,17 +6,23 @@ The MCP front door: the analyst tool layer (`AnalystTools`) behind the Python
 MCP SDK, so Claude Code, Codex or any MCP client drives it. The host agent is
 the brain; this server supplies the data, the rules and the record.
 
-Phase 2 exposes 8 of the design's 12 tools, plus the 4 workflow tools that
-the order rules need:
+Exposes 9 of the design's 12 tools, plus the 4 workflow tools that the order
+rules need:
 
-    load_dataset  profile  run_analysis  check_feature
+    load_dataset  profile  confirm_roles  run_analysis  check_feature
     falsify  record_finding  kb_search  report
     set_goal  set_methodology  record_data_answer  request_modeling_authorisation
 
-`confirm_roles`, `sql`, `build_sample` and `kb_add` arrive in Phase 3, with
-column roles and the Knowledge Pack.
+`sql`, `build_sample` and `kb_add` arrive later in Phase 3, with the
+Knowledge Pack.
 
 Rules enforced here, server-side, whichever agent calls:
+
+- Column roles must be confirmed (confirm_roles) before the steps that
+  depend on them: record_finding, report, and check_feature's leakage
+  check. Exploring with run_analysis is allowed before; the report counts
+  those cells as "roles unconfirmed". label, label_time and label_source are
+  always the person's call; an agent-relayed confirmation is flagged.
 
 - Code runs only in the analysis kernel, sandboxed per ADR 0001 (default
   `best`; `--require-isolation` refuses anything below `sandboxed`). No
@@ -44,7 +50,7 @@ from typing import Literal, Optional, Union
 INSTRUCTIONS = (
     "Ledgerhound is a fraud-analytics specialist. Raw data stays in its "
     "sandboxed kernel; you see summaries. Order: load_dataset -> profile -> "
-    "set_goal -> run_analysis / check_feature -> falsify(claim) -> "
+    "confirm_roles -> set_goal -> run_analysis / check_feature -> falsify(claim) -> "
     "record_finding(claim) -> report. Tools refuse out-of-order or unsafe "
     "steps and say how to fix them; follow the fix rather than working "
     "around it with your own pandas, because only findings recorded here "
@@ -72,6 +78,7 @@ class LedgerhoundSession:
         self.tools = tools or AnalystTools(
             out_root=out_root, renderer=_stderr, gate=self.gate,
             use_kernel=True, exec_fallback=False, isolation=policy)
+        self.tools.require_confirmed_roles = True
         self._falsified: list[tuple[str, set]] = []
         self._lock = None
 
@@ -326,12 +333,30 @@ def build_server(session: LedgerhoundSession):
         columns against the label column, computed in the kernel."""
         if not features:
             return "check_feature needs at least one feature column."
+        refused = s.tools.role_feature_refusal(features, label)
+        if refused:
+            return refused
+        no_leak = s.tools._roles_refusal("the leakage check")
+        leak = ("'REFUSED: column roles are not confirmed; call confirm_roles'"
+                if no_leak else f"check_leakage(_f, label_column={label!r})")
         code = ("import json as _j\n"
                 f"_f = {features!r}\n"
                 f"_r = {{'strength': evaluate_features(df, _f, {label!r}),\n"
-                f"      'leakage': check_leakage(_f, label_column={label!r})}}\n"
+                f"      'leakage': {leak}}}\n"
                 "print(_j.dumps(_r, default=str, indent=1)[:8000])")
         return await s.call(ctx, "run_python", {"code": code})
+
+    @server.tool()
+    async def confirm_roles(ctx: Context, roles: Optional[dict[str, str]] = None,
+                            absent: Optional[list[str]] = None,
+                            confirm: Optional[str] = None) -> Union[str, InputRequiredResult]:
+        """Confirm what each column IS (payer, payee, event_time, amount,
+        label, label_time, rule_output, ...); guardrails use roles, not
+        names. Fix a role with roles={column: role}; declare missing label
+        roles with absent=["label_time", ...]. If the result says NEEDS USER
+        DECISION, ask the user and call again with confirm=<their choice>."""
+        args = {k: v for k, v in (("roles", roles), ("absent", absent)) if v}
+        return await s.call(ctx, "confirm_roles", args, confirm=confirm, may_ask=True)
 
     @server.tool()
     async def falsify(claim: str, ctx: Context) -> str:
@@ -427,6 +452,12 @@ def build_server(session: LedgerhoundSession):
     def findings() -> str:
         """Every finding recorded in this session."""
         return json.dumps(s.recorded_findings(), default=str, indent=1)
+
+    @server.resource("ledgerhound://roles", mime_type="application/json")
+    def column_roles() -> str:
+        """Every column's role, confidence, and who settled it."""
+        rm = s.tools.roles
+        return json.dumps(rm.to_dict() if rm else {"roles": "no data loaded"}, indent=1)
 
     @server.resource("ledgerhound://isolation", mime_type="application/json")
     def isolation() -> str:

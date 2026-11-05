@@ -245,6 +245,14 @@ TOOL_SPECS: list[dict] = [
             "against_story": {"type": "string", "description": "A story_id (see /story or /library) to compare against. Defaults to the story immediately before the current one."}},
             "required": ["feature"]}}},
     {"type": "function", "function": {
+        "name": "confirm_roles",
+        "description": "Confirm what each column IS (payer, payee, event_time, amount, label, label_time, rule_output, ...): guardrails key off these roles, not column names. Ledgerhound proposes roles on load; this asks the user to confirm them in one question. Correct a role with roles={column: role}; declare that the data has no label, label_time or label_source column with absent=[...]. label, label_time and label_source are always the user's call.",
+        "parameters": {"type": "object", "properties": {
+            "roles": {"type": "object", "description": "Corrections, {column: role}."},
+            "absent": {"type": "array", "items": {"type": "string"},
+                       "description": "Label roles the data does not have: label, label_time, label_source."}},
+            "required": []}}},
+    {"type": "function", "function": {
         "name": "undo_last_transform",
         "description": "Restore the dataframe to its state before the last run_python call that changed it -- use this when a mutation (a filter, drop, etc.) turns out to be wrong. Only available for small/medium in-session (exec-mode) data; kernel-mode or very large data has no automatic undo copy -- use load_data to start over instead.",
         "parameters": {"type": "object", "properties": {}, "required": []}}},
