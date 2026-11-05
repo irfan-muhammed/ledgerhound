@@ -200,6 +200,7 @@ class ReportingToolsMixin:
         else:
             lines.append("- No analysis code was run.")
         lines.extend(self._roles_provenance())
+        lines.extend(self._sample_provenance())
         lines.append("- Every finding in this report was recorded through Ledgerhound and is "
                      "tagged \"verified on data\". Anything in the text that comes from your "
                      "knowledge base, and is not a finding, is unverified on this data.")

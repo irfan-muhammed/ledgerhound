@@ -34,8 +34,8 @@ needs_bwrap = pytest.mark.skipif(not iso.bwrap_works(), reason="bubblewrap unava
 PHASE2 = {"load_dataset", "profile", "run_analysis", "check_feature", "falsify",
           "record_finding", "kb_search", "report", "set_goal", "set_methodology",
           "record_data_answer", "request_modeling_authorisation"}
-TOOLS = PHASE2 | {"confirm_roles", "kb_add", "sql"}
-NOT_YET = {"build_sample"}
+TOOLS = PHASE2 | {"confirm_roles", "kb_add", "sql", "build_sample"}
+NOT_YET: set = set()
 CLAIM = "fraud transactions carry far larger amounts than legitimate ones"
 AUTH_Q = "request_modeling_authorisation"
 ROLES_YES = "yes, these roles are right"

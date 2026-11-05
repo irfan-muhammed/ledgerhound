@@ -6,15 +6,14 @@ The MCP front door: the analyst tool layer (`AnalystTools`) behind the Python
 MCP SDK, so Claude Code, Codex or any MCP client drives it. The host agent is
 the brain; this server supplies the data, the rules and the record.
 
-Exposes 11 of the design's 12 tools, plus the 4 workflow tools that the order
+Exposes the design's 12 tools, plus the 4 workflow tools that the order
 rules need:
 
     load_dataset  profile  confirm_roles  run_analysis  sql  check_feature
-    falsify  record_finding  kb_search  kb_add  report
+    build_sample  falsify  record_finding  kb_search  kb_add  report
     set_goal  set_methodology  record_data_answer  request_modeling_authorisation
 
-`build_sample` arrives later in Phase 3. `sql` is DuckDB only (Trino is
-deferred).
+`sql` is DuckDB only (Trino is deferred).
 
 Rules enforced here, server-side, whichever agent calls:
 
@@ -23,6 +22,9 @@ Rules enforced here, server-side, whichever agent calls:
   check. Exploring with run_analysis is allowed before; the report counts
   those cells as "roles unconfirmed". label, label_time and label_source are
   always the person's call; an agent-relayed confirmation is flagged.
+- build_sample refuses until label lag and prevalence are settled. Without a
+  label-time column the person states an assumed lag (or that labels are
+  final) and the certificate records it as an assumption, not a check.
 
 - Code runs only in the analysis kernel, sandboxed per ADR 0001 (default
   `best`; `--require-isolation` refuses anything below `sandboxed`). No
@@ -50,8 +52,8 @@ from typing import Literal, Optional, Union
 INSTRUCTIONS = (
     "Ledgerhound is a fraud-analytics specialist. Raw data stays in its "
     "sandboxed kernel; you see summaries. Order: load_dataset -> profile -> "
-    "confirm_roles -> set_goal -> run_analysis / check_feature -> falsify(claim) -> "
-    "record_finding(claim) -> report. Tools refuse out-of-order or unsafe "
+    "confirm_roles -> set_goal -> run_analysis / sql / check_feature -> falsify(claim) -> "
+    "record_finding(claim) -> build_sample (when modelling) -> report. Tools refuse out-of-order or unsafe "
     "steps and say how to fix them; follow the fix rather than working "
     "around it with your own pandas, because only findings recorded here "
     "appear in the certified report. When a tool returns NEEDS USER "
@@ -265,20 +267,27 @@ def build_server(session: LedgerhoundSession):
     server = MCPServer(name="ledgerhound", version=__version__, instructions=INSTRUCTIONS)
     s = session
 
-    @server.tool()
+    def tool():
+        """server.tool(), with the docstring's indentation collapsed: the
+        descriptions are fixed per-session token overhead in every client."""
+        def deco(fn):
+            return server.tool(description=" ".join((fn.__doc__ or "").split()))(fn)
+        return deco
+
+    @tool()
     async def load_dataset(path: str, ctx: Context) -> str:
         """Load a CSV/Parquet file or folder into the sandboxed analysis kernel
         as `df`. Returns shape, columns, open data questions and the kernel's
         isolation level. Call this first."""
         return await s.call(ctx, "load_data", {"path": path})
 
-    @server.tool()
+    @tool()
     async def profile(ctx: Context) -> str:
         """Profile the loaded dataset: types, nulls, cardinality,
         distributions, quality. Refuses if nothing is loaded."""
         return await s.call(ctx, "profile_data", {})
 
-    @server.tool()
+    @tool()
     async def run_analysis(code: str, ctx: Context) -> str:
         """Run Python in the sandboxed kernel: pandas (cuDF on GPU), `df`
         preloaded, helpers evaluate_feature, evaluate_features, check_leakage.
@@ -287,14 +296,14 @@ def build_server(session: LedgerhoundSession):
         whose assumptions fail. print() what you need to see."""
         return await s.call(ctx, "run_python", {"code": code})
 
-    @server.tool()
+    @tool()
     async def sql(query: str, ctx: Context, max_rows: int = 50) -> str:
         """One read-only DuckDB SELECT over the loaded data (table `df`), run
         in the sandboxed kernel. Writes, COPY, ATTACH, file reads and settings
         are refused. Aggregate in SQL; at most 200 rows come back."""
         return await s.call(ctx, "sql", {"query": query, "max_rows": max_rows})
 
-    @server.tool()
+    @tool()
     async def check_feature(features: list[str], label: str, ctx: Context) -> str:
         """IV / KS / AUC strength and leakage checks for one or more feature
         columns against the label column, computed in the kernel."""
@@ -313,7 +322,7 @@ def build_server(session: LedgerhoundSession):
                 "print(_j.dumps(_r, default=str, indent=1)[:8000])")
         return await s.call(ctx, "run_python", {"code": code})
 
-    @server.tool()
+    @tool()
     async def confirm_roles(ctx: Context, roles: Optional[dict[str, str]] = None,
                             absent: Optional[list[str]] = None,
                             confirm: Optional[str] = None) -> Union[str, InputRequiredResult]:
@@ -325,7 +334,24 @@ def build_server(session: LedgerhoundSession):
         args = {k: v for k, v in (("roles", roles), ("absent", absent)) if v}
         return await s.call(ctx, "confirm_roles", args, confirm=confirm, may_ask=True)
 
-    @server.tool()
+    @tool()
+    async def build_sample(ctx: Context, design_prevalence: str = "", label_lag: str = "",
+                           split: str = "", entity: str = "", time_unit: str = "",
+                           embargo_days: int = 0,
+                           confirm: Optional[str] = None) -> Union[str, InputRequiredResult]:
+        """Train/test sample from the confirmed roles, with a construction
+        certificate. Needs design_prevalence (fraction or 'natural'); with no
+        label-time column, label_lag (days, 'final', 'policy') for the user to
+        confirm. time_unit for a numeric event time. split: temporal, entity
+        or grouped_temporal (default: best the roles allow). On NEEDS USER
+        DECISION, ask the user, then call again with confirm=<choice>."""
+        args = {k: v for k, v in (("design_prevalence", design_prevalence),
+                                  ("label_lag", label_lag), ("split", split),
+                                  ("entity", entity), ("time_unit", time_unit)) if v}
+        args.update(embargo_days=embargo_days)
+        return await s.call(ctx, "build_sample", args, confirm=confirm, may_ask=True)
+
+    @tool()
     async def falsify(claim: str, ctx: Context) -> str:
         """The falsification plan for a claim: the routes that could break it
         (subgroup reversal, period holdout, prevalence shift, grain
@@ -336,7 +362,7 @@ def build_server(session: LedgerhoundSession):
             s.note_falsified(claim)
         return out
 
-    @server.tool()
+    @tool()
     async def record_finding(claim: str, ctx: Context,
                              sample_frame: Literal["within_stratum", "cross_stratum",
                                                    "population_estimate", "unknown"] = "unknown",
@@ -362,7 +388,7 @@ def build_server(session: LedgerhoundSession):
             args["pvalue"] = pvalue
         return await s.call(ctx, "record_finding", args)
 
-    @server.tool()
+    @tool()
     async def kb_search(query: str, ctx: Context) -> str:
         """Search recorded findings and the Knowledge Pack (typologies, rules,
         dictionary, known findings, label policies, documents). Hits are
@@ -370,7 +396,7 @@ def build_server(session: LedgerhoundSession):
         this dataset until checked with run_analysis."""
         return await s.call(ctx, "kb_search", {"query": query})
 
-    @server.tool()
+    @tool()
     async def report(title: str, markdown: str, ctx: Context) -> str:
         """Write the report: your markdown plus every finding recorded since
         the last report, and a provenance section Ledgerhound writes itself
@@ -381,7 +407,7 @@ def build_server(session: LedgerhoundSession):
                     "to certify. Record findings with record_finding first.")
         return await s.call(ctx, "save_report", {"title": title, "markdown": markdown})
 
-    @server.tool()
+    @tool()
     async def set_goal(objective: str, ctx: Context, unit_of_analysis: str = "",
                        entity_key: str = "", label_column: str = "", notes: str = "") -> str:
         """Declare the session goal: objective, unit of analysis (e.g.
@@ -394,14 +420,14 @@ def build_server(session: LedgerhoundSession):
                 args[k] = v
         return await s.call(ctx, "set_goal", args)
 
-    @server.tool()
+    @tool()
     async def set_methodology(ctx: Context, template: str = "", mode: str = "") -> str:
         """Adopt a phase methodology the USER chose (call with no template to
         list them). Ask the user; do not pick one yourself."""
         args = {k: v for k, v in (("template", template), ("mode", mode)) if v}
         return await s.call(ctx, "set_methodology", args)
 
-    @server.tool()
+    @tool()
     async def record_data_answer(key: str, answer: str, ctx: Context, question: str = "") -> str:
         """Record the USER's answer to an open data question that load_dataset
         listed. Only answers the user gave; never your own guess."""
@@ -410,7 +436,7 @@ def build_server(session: LedgerhoundSession):
             args["question"] = question
         return await s.call(ctx, "record_data_answer", args)
 
-    @server.tool()
+    @tool()
     async def request_modeling_authorisation(
             summary: str, ctx: Context,
             confirm: Optional[str] = None) -> Union[str, InputRequiredResult]:
@@ -425,7 +451,7 @@ def build_server(session: LedgerhoundSession):
         """Every finding recorded in this session."""
         return json.dumps(s.recorded_findings(), default=str, indent=1)
 
-    @server.tool()
+    @tool()
     async def kb_add(ctx: Context, entry: Optional[dict] = None, document: str = "",
                      scope: Literal["project", "team"] = "project", title: str = "",
                      source: str = "", confirm: Optional[str] = None) -> Union[str, InputRequiredResult]:
@@ -442,6 +468,13 @@ def build_server(session: LedgerhoundSession):
         """Every column's role, confidence, and who settled it."""
         rm = s.tools.roles
         return json.dumps(rm.to_dict() if rm else {"roles": "no data loaded"}, indent=1)
+
+    @server.resource("ledgerhound://certificate", mime_type="application/json")
+    def certificate() -> str:
+        """The construction certificate of the current sample (build_sample)."""
+        c = s.tools.certificate
+        return json.dumps(c.to_dict() if c else {"certificate": "no sample built yet"},
+                          indent=1, default=str)
 
     @server.resource("ledgerhound://isolation", mime_type="application/json")
     def isolation() -> str:

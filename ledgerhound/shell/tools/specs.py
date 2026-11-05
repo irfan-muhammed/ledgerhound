@@ -254,6 +254,17 @@ TOOL_SPECS: list[dict] = [
                        "description": "Label roles the data does not have: label, label_time, label_source."}},
             "required": []}}},
     {"type": "function", "function": {
+        "name": "build_sample",
+        "description": "Build a train/test sample from the CONFIRMED column roles, with a construction certificate. Refuses until label lag and prevalence are settled: with no label-time column pass label_lag (days, 'final' or 'policy') -- the user confirms it and it is recorded as an assumption; pass design_prevalence (a fraction, or 'natural').",
+        "parameters": {"type": "object", "properties": {
+            "design_prevalence": {"type": "string"},
+            "label_lag": {"type": "string"},
+            "split": {"type": "string", "enum": ["", "temporal", "entity", "grouped_temporal"]},
+            "entity": {"type": "string"},
+            "time_unit": {"type": "string", "description": "for a numeric event time: seconds, minutes, hours, days, weeks or months"},
+            "test_fraction": {"type": "number"},
+            "embargo_days": {"type": "integer"}}}}},
+    {"type": "function", "function": {
         "name": "sql",
         "description": "Run ONE read-only DuckDB SELECT over the loaded data (table `df`) inside the analysis kernel and get the result table. Writes, COPY, ATTACH, file reads and settings are refused. Aggregate in SQL; results are capped at max_rows (default 50, at most 200).",
         "parameters": {"type": "object", "properties": {

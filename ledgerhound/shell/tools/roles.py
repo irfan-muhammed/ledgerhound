@@ -43,6 +43,7 @@ class RolesToolsMixin:
         else infer one. Returns the line load_data shows."""
         from ledgerhound.roles import RoleStore, infer_roles
         self._cells_before_roles = 0
+        self._reset_sample()
         cols = [str(c) for c in self._df.columns]
         stored = None
         try:
